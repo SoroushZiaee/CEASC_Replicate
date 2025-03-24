@@ -1,0 +1,5 @@
+torch==2.2.0+computecanada
+numpy==1.26.4+computecanada
+tensorboard==2.12.0+computecanada
+tensorboard-data-server==0.7.0+computecanada
+tensorboard-plugin-wit==1.8.1+computecanada
