@@ -11,4 +11,19 @@ class AMM_module(torch.nn.Module):
     def forward(self,x):
         c1 = self.conv(x)
         s1 = c1 + torch.nn.functional.gumbel_softmax(c1,dim=1)
-        # hard thresholding here 
+        hard = torch.argwhere(s1 < 0.5)
+        hi = torch.empty_like(s1,requires_grad=True) # baseline for the binary mask 
+        hi[hard] = 0 # set all the values where s1 is less than 0.5 to 0
+        hi[~hard] = 1 # set all the values where s1 is >= 0.5 to 1 
+
+class AMM_loss(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super(AMM_loss).__init__(*args, **kwargs)
+    def forward(self,h,label):
+        l = [] # will contain the loss for each layer 
+        for i in range(len(label)): # for the ground truth mask of each layer of the FPN
+            pi = sum(torch.argwhere(label[i]>0))/(label[i].shape[1]*label[i].shape[2]*label[i].shape[3]) # ratio of pixels containing classified objects to total pixels in GT - assumes batch size of one currently
+            li = ((sum(torch.argwhere(h[i]>0))/(h[i].shape[1]*h[i].shape[2]*h[i].shape[3]))-pi)**2 # difference in ratio between the label ratio and data ratio
+            l.append(li)
+        l_amm = sum(l)/len(l)
+
