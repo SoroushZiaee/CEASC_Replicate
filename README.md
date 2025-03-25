@@ -1,1 +1,2 @@
 # CEASC_Replicate
+NOTE: You will need to use download_uavdt.py and download_visdrone.py to access the datasets. Please alter the file paths in these scripts to ensure that datasets are downloaded an unzipped in an appropriate directory.

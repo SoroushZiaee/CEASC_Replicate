@@ -5,14 +5,14 @@ import torch
 import numpy as np
 
 class AMM_module(torch.nn.Module):
-    def __init__(self):
-        super(AMM_module, self). __init__()
-        self.conv = torch.nn.Conv2d(3,10,3,padding='same') # assuming input has 3 channels (e.g., RGB) and there are 10 classes - we need one binary mask per class 
+    def __init__(self, n_classes):
+        super(AMM_module, self, n_classes). __init__()
+        self.conv = torch.nn.Conv2d(3,n_classes,3,padding='same') # assuming input has 3 channels (e.g., RGB) and there are 10 classes - we need one binary mask per class 
     def forward(self,x):
         c1 = self.conv(x)
-        s1 = c1 + torch.nn.functional.gumbel_softmax(c1,dim=1)
+        s1 = c1 + torch.nn.functional.gumbel_softmax(c1,dim=1) # make sure this implimentation is the same as the paper and contains learnable parameters as discussed in the paper 
         hard = torch.argwhere(s1 < 0.5)
-        hi = torch.empty_like(s1,requires_grad=True) # baseline for the binary mask 
+        hi = torch.empty_like(s1,requires_grad=True) # baseline for the binary mask -- set requires grad as true for now, might not be the case later -- work through this 
         hi[hard] = 0 # set all the values where s1 is less than 0.5 to 0
         hi[~hard] = 1 # set all the values where s1 is >= 0.5 to 1 
         return hi
