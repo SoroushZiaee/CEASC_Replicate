@@ -16,13 +16,13 @@ module list
 
 pip freeze
 
-virtualenv --no-download $SLURM_TMPDIR/env
-source $SLURM_TMPDIR/env/bin/activate
+# virtualenv --no-download $SLURM_TMPDIR/env
+source /home/soroush1/projects/def-kohitij/soroush1/CEASC_Replicate/.venv/bin/activate
 
 pip install --no-index --upgrade pip
 
 echo "Installing requirements"
-pip install --no-index -r requirements.txt
+# pip install --no-index -r requirements.txt
 
 echo "Env has been set up"
 
