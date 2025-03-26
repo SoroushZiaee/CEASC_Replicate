@@ -41,6 +41,7 @@ with torch.no_grad():
     c_feats = backbone(dummy_input)
     p_feats = neck(c_feats)
 
+print(f"{type(p_feats) = }")
 # Print FPN outputs
 for i, f in enumerate(p_feats):
     print(f"P{i+3}: {f.shape}")

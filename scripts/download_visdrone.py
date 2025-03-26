@@ -91,7 +91,7 @@ def download(urls, dir, threads=4, extract=True):
 
 # Example usage
 if __name__ == "__main__":
-    dataset_dir = "/home/soroush1/scratch/eecs_project"
+    dataset_dir = "/home/eyakub/scratch/eecs_project"
     urls = [
         "https://github.com/ultralytics/assets/releases/download/v0.0.0/VisDrone2019-DET-train.zip",
         "https://github.com/ultralytics/assets/releases/download/v0.0.0/VisDrone2019-DET-val.zip",
