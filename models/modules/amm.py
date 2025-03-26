@@ -5,16 +5,23 @@ import torch
 import numpy as np
 
 class AMM_module(torch.nn.Module):
-    def __init__(self, n_classes):
-        super(AMM_module, self, n_classes). __init__()
-        self.conv = torch.nn.Conv2d(3,1,3,padding='same') # assuming input has 3 channels (e.g., RGB) and set number of output channels to 1 based on paper specs
-    def forward(self,x):
-        c1 = self.conv(x)
+    def __init__(self):
+        super(AMM_module, self). __init__()
+        self.modes = ["train","test"]
+        self.conv = torch.nn.Conv2d(256,1,3,padding='same') # number of input channels is 256 based on FPN feature channel dimensions and output is one channel based on paper 
+    def forward(self,xi,mode):
+        if mode not in self.modes:
+            raise ValueError(f"Invalid mode. Expected one of: {self.modes}") # make sure training or testing mode for amm is set
+        si = self.conv(xi)
+        hi = torch.empty_like(si,requires_grad=True) # baseline for the binary mask -- set requires grad as true for now, might not be the case later -- work through this 
+        if mode == "train":
+
+        else:
+            hard = torch.argwhere(si > 0)
+            hi[hard] = 1 # set all the values where si > 0 to 1
+            hi[~hard] = 0 # set all the values where si < 0 to 0
+
         s1 = c1 + torch.nn.functional.gumbel_softmax(c1,dim=1) # make sure this implimentation is the same as the paper and contains learnable parameters as discussed in the paper 
-        hard = torch.argwhere(s1 < 0.5)
-        hi = torch.empty_like(s1,requires_grad=True) # baseline for the binary mask -- set requires grad as true for now, might not be the case later -- work through this 
-        hi[hard] = 0 # set all the values where s1 is less than 0.5 to 0
-        hi[~hard] = 1 # set all the values where s1 is >= 0.5 to 1 
         return hi
 
 class AMM_loss(torch.nn.Module):
