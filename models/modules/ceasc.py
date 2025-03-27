@@ -10,9 +10,9 @@ class CEASC(nn.module):
     def __init__(self, in_channels, out_channels, num_classes: int = 10):
         super(CEASC, self).__init__()
 
-        # TODO: Put AMM modules here:
-        # self.cls_amm = AMM_module()
-        # self.reg_amm = AMM_module()
+        # AMM modules here:
+        self.cls_amm = AMM_module(in_channels)
+        self.reg_amm = AMM_module(in_channels)
 
         # 4*CESC module
         self.cls_convs = nn.Sequential(
@@ -32,8 +32,8 @@ class CEASC(nn.module):
 
     def forward(self, x, stage: str = "train"):
         # compute masks
-        cls_mask = self.cls_amm(x)
-        reg_mask = self.reg_amm(x)
+        cls_mask = self.cls_amm(x,stage)
+        reg_mask = self.reg_amm(x,stage)
 
         # global features and pointwise conv
         global_context = F.adaptive_avg_pool2d(x, (1, 1))
