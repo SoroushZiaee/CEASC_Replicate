@@ -22,6 +22,29 @@ class CEASC(nn.Module):
             *[CESC(in_channels, in_channels) for _ in range(4)]
         )
 
+        # Dense layers
+        self.cls_dense_convs = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
+                    nn.GroupNorm(32, in_channels),
+                    nn.ReLU(inplace=True),
+                )
+                for _ in range(4)
+            ]
+        )
+
+        self.reg_dense_convs = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
+                    nn.GroupNorm(32, in_channels),
+                    nn.ReLU(inplace=True),
+                )
+                for _ in range(4)
+            ]
+        )
+
         # Global features
         self.global_cls = nn.Conv2d(in_channels, in_channels, kernel_size=1)
         self.global_reg = nn.Conv2d(in_channels, in_channels, kernel_size=1)
@@ -42,17 +65,42 @@ class CEASC(nn.Module):
 
         # apply 4 CESC modules
         # Fix: Chain them as in a real sequential model:
+        sparse_cls_feats = []  # F_{i,j}
         cls_feat = x
         for cesc in self.cls_convs:
             cls_feat = cesc(cls_feat, cls_mask_hard, global_cls)
+            sparse_cls_feats.append(cls_feat)
 
         reg_feat = x
+        sparse_reg_feats = []  # F_{i,j}
         for cesc in self.reg_convs:
             reg_feat = cesc(reg_feat, reg_mask_hard, global_reg)
+            sparse_reg_feats.append(reg_feat)
+
+        # dense layers
+        cls_feat_dense = []
+        cls_feat = x
+        for dense_conv in self.cls_dense_convs:
+            cls_feat = dense_conv(cls_feat)
+            cls_feat_dense.append(cls_feat)
+
+        reg_feat_dense = []
+        reg_feat = x
+        for dense_conv in self.reg_dense_convs:
+            reg_feat = dense_conv(reg_feat)
+            reg_feat_dense.append(reg_feat)
 
         # final prediction
         cls_out = self.cls_pred(cls_feat)
         reg_out = self.reg_pred(reg_feat)
 
-        # return our soft masks for loss(amm) calculation
-        return cls_out, reg_out, cls_mask_soft, reg_mask_soft
+        return (
+            cls_out,
+            reg_out,  # final predictions
+            cls_mask_soft,
+            reg_mask_soft,  # for Lamm loss
+            sparse_cls_feats,
+            sparse_reg_feats,  # F_{i,j}
+            cls_feat_dense,
+            reg_feat_dense,  # C_{i,j}
+        )

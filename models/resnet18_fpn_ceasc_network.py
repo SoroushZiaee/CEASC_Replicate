@@ -17,16 +17,43 @@ class Res18FPNCEASC(nn.Module):
 
     def forward(self, x, stage: str = "train"):
         feats = self.backbone(x)
-        cls_outs = []
-        reg_outs = []
-        cls_soft_mask_outs = []
-        reg_soft_mask_outs = []
+
+        cls_outs, reg_outs = [], []
+        cls_soft_mask_outs, reg_soft_mask_outs = [], []
+
+        sparse_cls_feats_outs, sparse_reg_feats_outs = [], []
+        dense_cls_feats_outs, dense_reg_feats_outs = [], []
 
         for head, feat in zip(self.detection_heads, feats):
-            cls_out, reg_out, cls_soft_mask, reg_soft_mask = head(feat, stage)
+            (
+                cls_out,
+                reg_out,
+                cls_soft_mask,
+                reg_soft_mask,
+                sparse_cls_feats,
+                sparse_reg_feats,
+                dense_cls_feats,
+                dense_reg_feats,
+            ) = head(feat, stage)
+
             cls_outs.append(cls_out)
             reg_outs.append(reg_out)
             cls_soft_mask_outs.append(cls_soft_mask)
             reg_soft_mask_outs.append(reg_soft_mask)
 
-        return cls_outs, reg_outs, cls_soft_mask_outs, reg_soft_mask_outs
+            sparse_cls_feats_outs.append(sparse_cls_feats)
+            sparse_reg_feats_outs.append(sparse_reg_feats)
+            dense_cls_feats_outs.append(dense_cls_feats)
+            dense_reg_feats_outs.append(dense_reg_feats)
+
+        return (
+            cls_outs,
+            reg_outs,
+            cls_soft_mask_outs,
+            reg_soft_mask_outs,
+            sparse_cls_feats_outs,
+            sparse_reg_feats_outs,
+            dense_cls_feats_outs,
+            dense_reg_feats_outs,
+            feats,  # dense_feats from FPN (optional)
+        )
