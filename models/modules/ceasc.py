@@ -11,8 +11,8 @@ class CEASC(nn.Module):
         super(CEASC, self).__init__()
 
         # AMM modules here:
-        self.cls_amm = AMM_module(in_channels)
-        self.reg_amm = AMM_module(in_channels)
+        self.cls_amm = AMM_module()
+        self.reg_amm = AMM_module()
 
         # 4*CESC module
         self.cls_convs = nn.Sequential(

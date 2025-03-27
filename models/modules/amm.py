@@ -8,7 +8,7 @@ import numpy as np
 class AMM_module(torch.nn.Module):
     def __init__(self):
         super(AMM_module, self).__init__()
-        self.modes = ["train", "test"]
+        self.modes = ["train", "val"]
         self.conv = torch.nn.Conv2d(
             256, 1, 3, padding="same"
         )  # number of input channels is 256 based on FPN feature channel dimensions and output is one channel based on paper

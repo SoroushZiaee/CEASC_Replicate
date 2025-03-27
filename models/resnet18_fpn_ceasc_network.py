@@ -6,9 +6,9 @@ from models.backbone.gfl_v1_fpn import ResNet18FPN
 from models.modules.ceasc import CEASC
 
 
-class Res18FPNCeasc(nn.Module):
+class Res18FPNCEASC(nn.Module):
     def __init__(self, config_path: str, num_classes: int = 10):
-        super(Res18FPNCeasc, self).__init__()
+        super(Res18FPNCEASC, self).__init__()
 
         self.backbone = ResNet18FPN(config_path=config_path, pretrained=True)
         self.detection_heads = nn.ModuleList(
