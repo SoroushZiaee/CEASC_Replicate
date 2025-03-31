@@ -15,7 +15,7 @@ class AMM_module(torch.nn.Module):
         self.temp = 1  # temperature on Gumble-Softmax
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, xi, mode):
+    def forward(self,xi,mode):
         if mode not in self.modes:
             raise ValueError(
                 f"Invalid mode. Expected one of: {self.modes}"
