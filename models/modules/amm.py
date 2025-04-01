@@ -13,6 +13,7 @@ class AMM_module(torch.nn.Module):
             256, 1, 3, padding="same"
         )  # number of input channels is 256 based on FPN feature channel dimensions and output is one channel based on paper
         self.temp = 1  # temperature on Gumble-Softmax
+        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, xi, mode):
         if mode not in self.modes:
@@ -27,7 +28,7 @@ class AMM_module(torch.nn.Module):
             g1 = -torch.empty_like(si).exponential_().log()
             g2 = -torch.empty_like(si).exponential_().log()
 
-            hi_soft = torch.nn.Sigmoid(
+            hi_soft = self.sigmoid(
                 (si + g1 - g2) / self.temp
             )  # modulate si by the noise and push through the sigmoid function
             hi_hard = (
