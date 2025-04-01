@@ -25,6 +25,25 @@ class Lnorm(nn.Module):
 
         loss = loss / (len(f) * len(f[0]))
         return loss.to(device)
+    
+class Lamm(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super(Lamm).__init__(*args, **kwargs)
+
+    def forward(self, h, label):
+        l = []  # will contain the loss for each layer
+        for i in range(
+            len(label)
+        ):  # for the ground truth mask of each layer of the FPN
+            pi = sum(label[i] > 0) / (
+                label[i].shape[0] * label[i].shape[2] * label[i].shape[3]
+            )  # ratio of pixels containing classified objects to total pixels in GT - now works with multiple batches by just including them in the calculation
+            li = (
+                (sum(h[i] > 0) / (h[i].shape[0] * h[i].shape[2] * h[i].shape[3])) - pi
+            ) ** 2  # difference in ratio between the label ratio and data ratio
+            l.append(li)
+        l_amm = sum(l) / len(l)
+        return l_amm
 
 
 class Ldet(nn.Module):
