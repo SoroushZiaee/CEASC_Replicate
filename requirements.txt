@@ -1,4 +1,5 @@
-torch==2.2.0+computecanada
+torch==2.1.2+computecanada
+torchvision==0.16.1+computecanada
 numpy==1.26.4+computecanada
 tensorboard==2.12.0+computecanada
 tensorboard-data-server==0.7.0+computecanada
