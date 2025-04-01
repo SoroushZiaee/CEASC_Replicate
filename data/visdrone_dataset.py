@@ -2,6 +2,7 @@ import torch
 from PIL import Image
 
 from torch.utils.data import Dataset
+from torchvision import transforms
 import os
 import numpy as np
 
@@ -53,6 +54,13 @@ class VisDroneDataset(Dataset):
         self.imgs = [f for f in os.listdir(self.img_dir) if f.endswith(".jpg")]
         self.imgs.sort()
 
+        if self.transform is None:
+            self.transform = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                ]
+            )
+
     def __len__(self):
         return len(self.imgs)
 
@@ -68,7 +76,7 @@ class VisDroneDataset(Dataset):
             for line in f:
                 parts = line.strip().split(",")
                 if len(parts) < 8:
-                    print(f"ignore this line: {line}")
+                    # print(f"ignore this line: {line}")
                     continue
 
                 x, y, width, height, visibility, category_id, truncation, occlusion = (
@@ -77,7 +85,7 @@ class VisDroneDataset(Dataset):
 
                 # Skip objects with category_id of 0 or 11 (ignored regions)
                 if category_id == 0 or category_id == 11:
-                    print(f"category: {category_id}")
+                    # print(f"category: {category_id}")
                     continue
 
                 # Skip objects that are invisible or uncertain (optional)
