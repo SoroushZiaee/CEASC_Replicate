@@ -10,6 +10,9 @@ class AP(torch.nn.Module):
         super(AP, self,t).__init__()
         self.t = t
     def forward():
+        """
+        computes the average precision 
+        """
 
 
 # AR1
