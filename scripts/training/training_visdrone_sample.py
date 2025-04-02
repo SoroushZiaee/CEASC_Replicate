@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from models import Res18FPNCEASC  # Adjust as needed
 from utils.dataset import get_dataset
-from utils.losses import Lnorm  # Adjust as needed
+from utils.losses import Lnorm, Lamm  # Adjust as needed
 
 
 def safe_shape(x):
@@ -54,6 +54,7 @@ def train(config):
 
     # Losses
     l_norm = Lnorm()
+    l_amm = Lamm()
 
     for epoch in range(num_epochs):
         total_loss = 0.0
@@ -120,7 +121,12 @@ def train(config):
                 sparse_cls_feats_outs, cls_soft_mask_outs, dense_cls_feats_outs
             )
 
+            loss_amm = l_amm(
+                targets["boxes"], reg_soft_mask_outs
+            ) # used the soft masks in this version, might be incorrect 
+
             print(f"Loss Norm: {loss_norm.item()}")
+            print(f"Loss AMM: {loss_amm.item()}")
 
             # Calculate loss — you must define this to fit CEASC
             # loss = ceasc_loss(outputs, targets)  # Custom function required

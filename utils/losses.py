@@ -32,6 +32,7 @@ class Lamm(torch.nn.Module):
 
     def forward(self, h, label):
         l = []  # will contain the loss for each layer
+        
         for i in range(
             len(label)
         ):  # for the ground truth mask of each layer of the FPN

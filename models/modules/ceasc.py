@@ -98,7 +98,7 @@ class CEASC(nn.Module):
             cls_out,
             reg_out,  # final predictions
             cls_mask_soft,
-            reg_mask_soft,  # for Lamm loss
+            reg_mask_soft,  # for Lamm loss because sigmoid is differentiable but the hard thresholding is not 
             sparse_cls_feats,
             sparse_reg_feats,  # F_{i,j}
             cls_feat_dense,
