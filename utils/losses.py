@@ -30,12 +30,32 @@ class Lamm(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super(Lamm).__init__(*args, **kwargs)
 
-    def forward(self, h, label):
+    def forward(self, h, label, im_dimx=800, im_dimy=1333): # NOTE dimension defaults set based on the paper specifications for visdrone
         l = []  # will contain the loss for each layer
-        
+
+        gt_masks_raw = torch.cat(label,dim=0) # concatenate the features along the 0th dimension, just a big tensor of features
+
         for i in range(
-            len(label)
-        ):  # for the ground truth mask of each layer of the FPN
+            len(h)
+        ):  # for each layer of the FPN 
+            
+            hi = h[i] # the soft mask for the ith FPN layer
+
+            scale_x = hi.shape[3]/im_dimx # the scaling factors to bring the label bounding boxes to the dimensions of FPN
+            scale_y = hi.shape[2]/im_dimy
+            
+            for n in len(label): # for each image in the batch
+                # get new gt mask scaled to the dimensions of Hi
+                gt_mask_scaled = torch.cat((gt_masks_raw[:,0]*scale_x, 
+                                            gt_masks_raw[:,1]*scale_y, 
+                                            gt_masks_raw[:,2]*scale_x,
+                                            gt_masks_raw[:,3]*scale_y), dim=1)
+                
+                # fill the bounding boxes into an empty mask with the shape of Hi -- start here, find a parallel way to do this
+
+                # add to a list of such masks, one per image which will then be stacked along dimension 0
+
+
             pi = sum(label[i] > 0) / (
                 label[i].shape[0] * label[i].shape[2] * label[i].shape[3]
             )  # ratio of pixels containing classified objects to total pixels in GT - now works with multiple batches by just including them in the calculation

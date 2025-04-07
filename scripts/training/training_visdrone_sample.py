@@ -50,7 +50,7 @@ def train(config):
     model.train()
 
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate) 
 
     # Losses
     l_norm = Lnorm()
