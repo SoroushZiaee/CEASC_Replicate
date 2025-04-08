@@ -1,5 +1,5 @@
 import os 
-from urllib.request import urlretrieve
+import requests 
 from zipfile import ZipFile 
 
 def main():
@@ -13,7 +13,8 @@ def main():
     dataset_a = f'/home/{user}/scratch'
 
     # set the url to UAV benchmark M
-    url = 'https://drive.google.com/file/d/1m8KA6oPIRK_Iwt9TYFquC87vBc_8wRVc/view'
+    # url = 'https://drive.google.com/file/d/1m8KA6oPIRK_Iwt9TYFquC87vBc_8wRVc/view'
+    url = "https://docs.google.com/uc?export=download&id=1m8KA6oPIRK_Iwt9TYFquC87vBc_8wRVc"
 
     # download dataset to the specified file path
     path, __ = urlretrieve(url,dataset_z)

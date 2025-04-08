@@ -33,7 +33,7 @@ class Lamm(torch.nn.Module):
     def forward(self, h, label, im_dimx=800, im_dimy=1333): # NOTE dimension defaults set based on the paper specifications for visdrone
         l = []  # will contain the loss for each layer
 
-        gt_masks_raw = torch.cat(label,dim=0) # concatenate the features along the 0th dimension, just a big tensor of features
+        gt_masks_raw = torch.cat(label,dim=0) # concatenate the features along the 0th dimension, just a big tensor of mask parameters
 
         for i in range(
             len(h)
@@ -43,7 +43,7 @@ class Lamm(torch.nn.Module):
 
             tn_pixel = hi.shape[0] * hi.shape[2] * hi.shape[3] # the total number of pixels in Hi and GT mask for calculating loss
 
-            gt_reshaped = torch.empty_like(hi) # the reshaped version of the ground truth mask
+            gt_reshaped = torch.zeros_like(hi) # the reshaped version of the ground truth mask, initialized as zeros 
 
             scale_x = hi.shape[3]/im_dimx # the scaling factors to bring the label bounding boxes to the dimensions of FPN
             scale_y = hi.shape[2]/im_dimy
@@ -55,17 +55,20 @@ class Lamm(torch.nn.Module):
                                             gt_masks_raw[:,2]*scale_x,
                                             gt_masks_raw[:,3]*scale_y), dim=1)
                 
-                # fill the bounding boxes into an empty mask with the shape of Hi -- start here, test this and see if it works
-                gt_reshaped[n, 0, gt_mask_scaled[:,1]:gt_mask_scaled[:,1]+gt_mask_scaled[:,3], gt_mask_scaled[:,0]:gt_mask_scaled[:,0]+gt_mask_scaled[:,2]] = 1
-
+                # fill the bounding boxes into an empty mask with the shape of Hi -- needs to be done iteratively for each object in the image 
+                for o in range(gt_mask_scaled.shape[0]):
+                    gt_reshaped[n, 0, gt_mask_scaled[o,1]:gt_mask_scaled[o,1]+gt_mask_scaled[o,3], gt_mask_scaled[o,0]:gt_mask_scaled[o,0]+gt_mask_scaled[o,2]] = 1
 
             # now we can actually go ahead and calculate the loss for each layer of the FPN
-            pi = sum(gt_reshaped > 0) / (tn_pixel)  # ratio of pixels containing classified objects to total pixels in GT - now works with multiple batches by just including them in the calculation
+            pi = sum(gt_reshaped) / (tn_pixel)  # ratio of pixels containing classified objects to total pixels in GT - now works with multiple batches by just including them in the calculation
             li = (
-                (sum(hi > 0) / tn_pixel) - pi
-            ) ** 2  # difference in ratio between the label and Hi activation ratio
-            l.append(li)
-        l_amm = sum(l) / len(l)
+                (sum(hi) / tn_pixel) - pi
+            ) ** 2  # difference in ratio between the label and Hi activation ratio -- NOTE: keep the hard thresholding here because its a soft mask but we want binary values for this addition
+            # NOTE this calculation may have to change, check whether its differentiable and gets the results we want -- may need to add the hard thresholding back in
+            
+            l.append(li) # add the loss for ith FPN layer to the list of losses 
+
+        l_amm = sum(l) / len(l) # the overall loss is an average of the losses for each layer of the FPN
         return l_amm
 
 
