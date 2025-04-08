@@ -73,8 +73,8 @@ def train(config):
                 print(f"--- Sample {i} ---")
                 print(f"Image ID:         {targets['image_id'][i]}")
                 print(f"Original Size:    {targets['orig_size'][i]}")
-                print(f"Boxes shape:      {targets['boxes'][i].shape}")   # [N_i, 4]
-                print(f"Labels shape:     {targets['labels'][i].shape}") # [N_i]
+                print(f"Boxes shape:      {targets['boxes'][i].shape}")  # [N_i, 4]
+                print(f"Labels shape:     {targets['labels'][i].shape}")  # [N_i]
                 print(f"Boxes:            {targets['boxes'][i]}")
                 print(f"Labels:           {targets['labels'][i]}")
 
@@ -90,6 +90,7 @@ def train(config):
                 dense_cls_feats_outs,
                 dense_reg_feats_outs,
                 feats,
+                anchors,
             ) = outputs
 
             print("\n🔍 Output shapes from model:")
@@ -117,13 +118,16 @@ def train(config):
                 )
                 print(f"feats[{i}]:                 {safe_shape(feats[i])}")
 
+            for i, anchor in enumerate(anchors):
+                print(f"P{i+3} Anchors shape: {anchor.shape}")
+
             loss_norm = l_norm(
                 sparse_cls_feats_outs, cls_soft_mask_outs, dense_cls_feats_outs
             )
 
             loss_amm = l_amm(
                 targets["boxes"], reg_soft_mask_outs
-            ) # used the soft masks in this version, might be incorrect 
+            )  # used the soft masks in this version, might be incorrect
 
             print(f"Loss Norm: {loss_norm.item()}")
             print(f"Loss AMM: {loss_amm.item()}")

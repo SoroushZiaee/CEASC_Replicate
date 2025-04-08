@@ -30,6 +30,7 @@ def test_ceasc_model(config_path, num_classes=10, batch_size=2, image_size=512):
             dense_cls_feats,
             dense_reg_feats,
             fpn_feats,
+            anchors,
         ) = model(x, stage="val")
 
     # Print output shape info

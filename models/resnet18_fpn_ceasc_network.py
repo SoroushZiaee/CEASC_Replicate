@@ -17,6 +17,8 @@ class Res18FPNCEASC(nn.Module):
 
     def forward(self, x, stage: str = "train"):
         feats = self.backbone(x)
+        # featmap_sizes = [feat.shape[-2:] for feat in feats]
+        # anchors = self.detection_heads[0].get_anchors(featmap_sizes)
 
         cls_outs, reg_outs = [], []
         cls_soft_mask_outs, reg_soft_mask_outs = [], []
@@ -46,6 +48,9 @@ class Res18FPNCEASC(nn.Module):
             dense_cls_feats_outs.append(dense_cls_feats)
             dense_reg_feats_outs.append(dense_reg_feats)
 
+        featmap_sizes = [feat.shape[-2:] for feat in cls_outs]
+        anchors = self.detection_heads[0].get_anchors(featmap_sizes)
+
         return (
             cls_outs,
             reg_outs,
@@ -56,4 +61,5 @@ class Res18FPNCEASC(nn.Module):
             dense_cls_feats_outs,
             dense_reg_feats_outs,
             feats,  # dense_feats from FPN (optional)
+            anchors,  # anchors from FPN (optional)
         )

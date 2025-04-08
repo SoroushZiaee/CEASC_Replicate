@@ -4,11 +4,21 @@ import torch.nn.functional as F
 
 from models.modules.amm import AMM_module
 from models.modules.cesc import CESC
+from mmdet.models.task_modules.prior_generators import AnchorGenerator
 
 
 class CEASC(nn.Module):
     def __init__(self, in_channels, out_channels, num_classes: int = 10):
         super(CEASC, self).__init__()
+
+        # Anchor generator
+        # Note: The original code seems to use a custom anchor generator
+        self.prior_generator = AnchorGenerator(
+            strides=[4, 8, 16, 32, 64],
+            ratios=[1.0],
+            scales=[8],
+            base_sizes=[16, 32, 64, 128, 256],  # matches your FPN levels P3–P7
+        )
 
         # AMM modules here:
         self.cls_amm = AMM_module()
@@ -52,6 +62,11 @@ class CEASC(nn.Module):
         # Final predictino layer (sparse conv)
         self.cls_pred = nn.Conv2d(in_channels, num_classes, kernel_size=3, padding=1)
         self.reg_pred = nn.Conv2d(in_channels, 4, kernel_size=1)
+
+    def get_anchors(self, featmap_sizes):
+        device = next(self.parameters()).device  # auto-detect the device
+        mlvl_anchors = self.prior_generator.grid_priors(featmap_sizes, device=device)
+        return mlvl_anchors
 
     def forward(self, x, stage: str = "train"):
         # compute masks
@@ -98,7 +113,7 @@ class CEASC(nn.Module):
             cls_out,
             reg_out,  # final predictions
             cls_mask_soft,
-            reg_mask_soft,  # for Lamm loss because sigmoid is differentiable but the hard thresholding is not 
+            reg_mask_soft,  # for Lamm loss because sigmoid is differentiable but the hard thresholding is not
             sparse_cls_feats,
             sparse_reg_feats,  # F_{i,j}
             cls_feat_dense,
