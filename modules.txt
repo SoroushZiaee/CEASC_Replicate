@@ -1,0 +1,5 @@
+The following modules must be loaded before running scripts in this repository
+StdEnv/2023
+python/3.11.5
+scipy-stack
+opencv/4.11.0 
