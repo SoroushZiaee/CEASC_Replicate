@@ -128,6 +128,9 @@ def main():
             global_image += 1
             # print(f"{frame_id} done")
 
+        # instead of writing to one file, write to one file per movie 
+        # output_path = os.path.join()
+
     with open(args.output_anno, 'w') as f:
         json.dump(json_label, f)
 
