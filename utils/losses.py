@@ -57,7 +57,7 @@ class Lamm(torch.nn.Module):
                 
                 # fill the bounding boxes into an empty mask with the shape of Hi -- needs to be done iteratively for each object in the image 
                 for o in range(gt_mask_scaled.shape[0]):
-                    gt_reshaped[n, 0, gt_mask_scaled[o,1]:gt_mask_scaled[o,1]+gt_mask_scaled[o,3], gt_mask_scaled[o,0]:gt_mask_scaled[o,0]+gt_mask_scaled[o,2]] = 1
+                    gt_reshaped[n, 0, gt_mask_scaled[o,1]:gt_mask_scaled[o,3], gt_mask_scaled[o,0]:gt_mask_scaled[o,2]] = 1
 
             # now we can actually go ahead and calculate the loss for each layer of the FPN
             pi = sum(gt_reshaped) / (tn_pixel)  # ratio of pixels containing classified objects to total pixels in GT - now works with multiple batches by just including them in the calculation

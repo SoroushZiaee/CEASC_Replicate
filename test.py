@@ -1,5 +1,6 @@
 import os 
 movies = os.listdir('/home/eyakub/scratch/CEASC_replicate/UAV-benchmark-M')
+movies.sort()
 
 testset = ['M0203', 'M0205', 'M0208', 'M0209', 'M0403', 'M0601', 'M0602', 'M0606',
             'M0701', 'M0801', 'M0802', 'M1001',

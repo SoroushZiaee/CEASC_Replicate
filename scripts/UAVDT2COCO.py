@@ -12,7 +12,7 @@ import json
 
 def parse_args():
     parser = argparse.ArgumentParser(description='build UFP images')
-    parser.add_argument('uavdt_root', help='the dir to save logs and models')
+    parser.add_argument('dataset_root', help='the dir to save logs and models') # this had to be changed to get the code to work
     parser.add_argument('output_anno', help='the dir to save logs and models')
     parser.add_argument('exclude_set', help='which set to not organize')
     args = parser.parse_args()
@@ -84,21 +84,33 @@ def main():
                 gts[frame_index] = []
             gts[frame_index].append([bbox_left, bbox_top, bbox_width, bbox_height, object_category - 1])
         return gts
+    
+    root_list = os.listdir(root)
+    root_list.sort()
 
-
-    for _dir in os.listdir(root):
+    for _dir in root_list:
         if _dir in set_dict[args.exclude_set]: # our modification to ensure that we can use the same script to organize both the train and test subsets 
             continue
-        gt_path = os.path.join(root, _dir, 'gt', 'gt_whole.txt')
-        gt_ignore_path = os.path.join(root, _dir, 'gt', 'gt_ignore.txt')
+        if _dir == "GT": # our modification so that the code does not break when it hits this directory 
+            continue
+
+        print(f"processing {_dir}")
+
+        gt_path = os.path.join(root,'GT',f'{_dir}_gt_whole.txt') # our modification to make this work with our storage style for this dataset 
+        gt_ignore_path = os.path.join(root,'GT',f'{_dir}_gt_ignore.txt')
+
+        # gt_path = os.path.join(root, _dir, 'gt', 'gt_whole.txt')
+        # gt_ignore_path = os.path.join(root, _dir, 'gt', 'gt_ignore.txt')
 
         gts = get_gt_by_frame(gt_path)
         gts_ignore = get_gt_by_frame(gt_ignore_path)
         for frame_id in gts.keys():
-            img_path = os.path.join(root, _dir, 'img1', img_prefix.format(frame_id))
+            # img_path = os.path.join(root, _dir, 'img1', img_prefix.format(frame_id))
+            img_path = os.path.join(root, _dir, img_prefix.format(frame_id))
             image_data = cv2.imread(img_path)
             h, w, c = image_data.shape
-            image_meta = build_image(os.path.join(_dir, 'img1', img_prefix.format(frame_id)), h, w, global_image)
+            # image_meta = build_image(os.path.join(_dir, 'img1', img_prefix.format(frame_id)), h, w, global_image)
+            image_meta = build_image(os.path.join(_dir, img_prefix.format(frame_id)), h, w, global_image)
             json_label['images'].append(image_meta)
             for annotation in gts[frame_id]:
                 [bbox_left, bbox_top, bbox_width, bbox_height, object_category] = annotation
@@ -114,6 +126,7 @@ def main():
                     json_label['annotations'].append(anno)
                     global_anno += 1
             global_image += 1
+            print(f"{frame_id} done")
 
     with open(args.output_anno, 'w') as f:
         json.dump(json_label, f)
