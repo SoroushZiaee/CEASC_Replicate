@@ -94,7 +94,7 @@ def main():
         if _dir == "GT": # our modification so that the code does not break when it hits this directory 
             continue
 
-        print(f"processing {_dir}")
+        # print(f"processing {_dir}")
 
         gt_path = os.path.join(root,'GT',f'{_dir}_gt_whole.txt') # our modification to make this work with our storage style for this dataset 
         gt_ignore_path = os.path.join(root,'GT',f'{_dir}_gt_ignore.txt')
@@ -126,7 +126,7 @@ def main():
                     json_label['annotations'].append(anno)
                     global_anno += 1
             global_image += 1
-            print(f"{frame_id} done")
+            # print(f"{frame_id} done")
 
     with open(args.output_anno, 'w') as f:
         json.dump(json_label, f)
