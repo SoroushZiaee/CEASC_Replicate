@@ -1,3 +1,9 @@
+# a script for organizing the dataset to COCO format, the same format that VisDrone is in and that the model was designed 
+# for.
+# This script was inherited from https://github.com/PuAnysh/UFPMP-Det, the repository that Du et al., 2023 recommended 
+# downloading the dataset from. The link to the pre-processed dataset was dead and the authors of the dataset (Du et al., 2018)
+# provided no indication as to how to convert their dataset to the necessary format. 
+
 import argparse
 import os
 import cv2
@@ -8,6 +14,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='build UFP images')
     parser.add_argument('uavdt_root', help='the dir to save logs and models')
     parser.add_argument('output_anno', help='the dir to save logs and models')
+    parser.add_argument('exclude_set', help='which set to not organize')
     args = parser.parse_args()
     return args
 
@@ -28,6 +35,8 @@ def main():
                 'M0703', 'M0604', 'M0901', 'M1008', 'M1002', 'M1306', 'M1201', 'M1102', 
                 'M1005', 'M0704', 'M0603', 'M0201', 'M1304', 'M0210', 'M0204', 'M0402', 
                 'M0501', 'M1003', 'M0207', 'M0605', 'M0702', 'M0401']
+    
+    set_dict = {'testset':testset, 'trainset': trainset}
 
     json_label = {
         'images': [],
@@ -78,7 +87,7 @@ def main():
 
 
     for _dir in os.listdir(root):
-        if _dir in testset:
+        if _dir in set_dict[args.exclude_set]: # our modification to ensure that we can use the same script to organize both the train and test subsets 
             continue
         gt_path = os.path.join(root, _dir, 'gt', 'gt_whole.txt')
         gt_ignore_path = os.path.join(root, _dir, 'gt', 'gt_ignore.txt')
