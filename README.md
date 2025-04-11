@@ -4,9 +4,10 @@ NOTE: You will need to use download_uavdt.py and download_visdrone.py to access 
 ## Setup
 ### On Compute Canada
 Run: 
-'''
+```
 module load StdEnv/2023 python/3.11.5 scipy-stack opencv/4.11.0
-'''
+```
+
 The use requirements.txt to create your virtual environment.
 
 ### On a Different Cluster
