@@ -13,6 +13,8 @@ Build your virtual environment and use requirements.txt to install dependencies.
 virtualenv --no-download .venv
 source .venv/bin/activate
 pip install -r --no-index requirements.txt
+```
+
 
 ### On a Different Cluster
 
