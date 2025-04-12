@@ -7,10 +7,13 @@
 
 # file.close()
 
-# image_path = imgs[5].split('\\')[0]
+# splits = imgs[0].split('\\')
+
+# image_path = splits[0]
 
 
 # print(image_path)
+# print(image_path.split('/')[-1][3:9])
 # print(image_path.split('/'))
 # print(int(image_path.split('/')[-1][:-1][3:9]))
 
@@ -19,5 +22,14 @@ from data import uavdt_dataset
 
 ds = uavdt_dataset.UAVDTDataset("/home/eyakub/scratch/CEASC_replicate", "train")
 
-print("loaded!")
+print(ds.__len__())
+
+out_dict = ds[1]
+print(out_dict["boxes"])
+print(out_dict["labels"])
+print(f"number of boxes: {len(out_dict['boxes'])} | number of labels: {len(out_dict['labels'])}")
+
+ds.visualize_item(1)
+
+# print("loaded!")
 
