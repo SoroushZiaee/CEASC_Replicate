@@ -27,10 +27,11 @@ class Lnorm(nn.Module):
         return loss.to(device)
     
 class Lamm(torch.nn.Module):
-    def __init__(self, *args, **kwargs):
-        super(Lamm).__init__(*args, **kwargs)
+    def __init__(self):
+        super(Lamm, self).__init__()
+        return print("Lamm init called")
 
-    def forward(self, h, label, im_dimx=800, im_dimy=1333): # NOTE dimension defaults set based on the paper specifications for visdrone
+    def forward(self, h, label, im_dimx, im_dimy): # NOTE dimension defaults set based on the paper specifications for visdrone
         l = []  # will contain the loss for each layer
 
         gt_masks_raw = torch.cat(label,dim=0) # concatenate the features along the 0th dimension, just a big tensor of mask parameters
@@ -48,7 +49,7 @@ class Lamm(torch.nn.Module):
             scale_x = hi.shape[3]/im_dimx # the scaling factors to bring the label bounding boxes to the dimensions of FPN
             scale_y = hi.shape[2]/im_dimy
             
-            for n in len(label): # for each image in the batch
+            for n in range(len(label)): # for each image in the batch
                 # get new gt mask scaled to the dimensions of Hi
                 gt_mask_scaled = torch.cat((gt_masks_raw[:,0]*scale_x, 
                                             gt_masks_raw[:,1]*scale_y, 
