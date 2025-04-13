@@ -43,6 +43,7 @@ Run the following code to download the UAVDT dataset and make a meta file to spe
 ```
 python scripts/download_uavdt.py
 python scripts/make_meta_uavdt.py --root_dir <insert path to UAV-benchmark-M directory>
+```
 
 
 ## Training
