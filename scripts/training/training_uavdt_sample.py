@@ -151,7 +151,6 @@ def train(config):
     # Save model
     # torch.save(model.state_dict(), "weights/ceasc_final.pth")
 
-
 def evaluate():
     pass
 
@@ -160,8 +159,8 @@ def main():
     mode = "train"  # Change to "eval" or "test" as needed
 
     config = {
-        "root_dir": "/home/soroush1/scratch/eecs_project",
-        "batch_size": 4,
+        "root_dir": "/home/eyakub/scratch/CEASC_replicate",
+        "batch_size": 1,
         "num_workers": 4,
         "num_epochs": 1,
         "lr": 1e-3,
