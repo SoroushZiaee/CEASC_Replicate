@@ -32,13 +32,13 @@ Note: Use with caution, we won't tell you how to manage your cluster 🙂
 ### Loading the Datasets 
 
 #### VisDrone
-Run the following code to download the VisDrone dataset. Make sure to edit the script to reflect your directory organization and desired output location for a directory called 
+Run the following code to download the VisDrone dataset. Make sure to edit the script to reflect your directory organization and desired output location for 4 directories: VisDrone2019-DET-test-challenge, VisDrone2019-DET-test-dev, VisDrone2019-DET-train, VisDrone2019-DET-val.
 
 ```
 python scripts/download_visdrone.py
 ```
 #### UAVDT
-Run the following code to download the UAVDT dataset and make a meta file to specify training, validation, and testing images. Make sure to edit the script to reflect your directory organization and desired output location for a directory called UAV-benchmark-M, which will contain the UAVDT dataset. 
+Run the following code to download the UAVDT dataset and make a meta file to specify training, validation, and testing images. Make sure to edit the script to reflect your directory organization and desired output location for 2 directories: UAV-benchmark-M and UAV-benchmark-MOTD_v1.0. 
 
 ```
 python scripts/download_uavdt.py
