@@ -14,7 +14,7 @@ virtualenv --no-download .venv
 source .venv/bin/activate
 pip install -r --no-index requirements.txt
 ```
-
+Follow the [instructions](https://mmdetection.readthedocs.io/en/latest/get_started.html) for using MMDetection as a third-party package to install MMDetection.
 
 ### On a Different Cluster
 Our code was built and run using python 3.11.5. For best compatibility, please use the closest possible version of python.
@@ -25,9 +25,25 @@ virtualenv --no-download .venv
 source .venv/bin/activate
 pip install -r requirements2.txt
 ```
+Follow the [instructions](https://mmdetection.readthedocs.io/en/latest/get_started.html) for using MMDetection as a third-party package to install MMDetection.
+
 Note: Use with caution, we won't tell you how to manage your cluster 🙂
 
 ### Loading the Datasets 
+
+#### VisDrone
+Run the following code to download the VisDrone dataset. Make sure to edit the script to reflect your directory organization and desired output location for a directory called 
+
+```
+python scripts/download_visdrone.py
+```
+#### UAVDT
+Run the following code to download the UAVDT dataset and make a meta file to specify training, validation, and testing images. Make sure to edit the script to reflect your directory organization and desired output location for a directory called UAV-benchmark-M, which will contain the UAVDT dataset. 
+
+```
+python scripts/download_uavdt.py
+python scripts/make_meta_uavdt.py --root_dir <insert path to UAV-benchmark-M directory>
+
 
 ## Training
 
