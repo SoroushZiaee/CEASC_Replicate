@@ -11,3 +11,4 @@ tensorboard-data-server==0.7.0
 tensorboard-plugin-wit==1.8.1
 jupyterlab
 requests==2.32.3
+tqdm==4.67.1

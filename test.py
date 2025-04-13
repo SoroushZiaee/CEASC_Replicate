@@ -17,19 +17,25 @@
 # print(image_path.split('/'))
 # print(int(image_path.split('/')[-1][:-1][3:9]))
 
-import torch
-from data import uavdt_dataset
+# import torch
+# from data import uavdt_dataset
 
-ds = uavdt_dataset.UAVDTDataset("/home/eyakub/scratch/CEASC_replicate", "train")
+# ds = uavdt_dataset.UAVDTDataset("/home/eyakub/scratch/CEASC_replicate", "train")
 
-print(ds.__len__())
+# print(ds.__len__())
 
-out_dict = ds[1]
-print(out_dict["boxes"])
-print(out_dict["labels"])
-print(f"number of boxes: {len(out_dict['boxes'])} | number of labels: {len(out_dict['labels'])}")
+# out_dict = ds[1]
+# print(out_dict["boxes"])
+# print(out_dict["labels"])
+# print(f"number of boxes: {len(out_dict['boxes'])} | number of labels: {len(out_dict['labels'])}")
 
-ds.visualize_item(1)
+# ds.visualize_item(1)
 
 # print("loaded!")
+
+import torch
+from mmengine.config import Config
+from mmdet.registry import MODELS
+
+print(f"perfect")
 

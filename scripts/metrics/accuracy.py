@@ -8,7 +8,7 @@ import torch
 class AP(torch.nn.Module):
     def __init__(self,t):
         super(AP, self,t).__init__()
-        self.t = t
+        self.t = t # set the threshold
     def forward():
         """
         computes the average precision 
