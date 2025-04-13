@@ -12,7 +12,7 @@ Then build your virtual environment and use requirements.txt to install dependen
 ```
 virtualenv --no-download .venv
 source .venv/bin/activate
-pip install -r --no-index requirements.txt
+pip install --no-index -r requirements.txt
 ```
 Follow the [instructions](https://mmdetection.readthedocs.io/en/latest/get_started.html) for using MMDetection as a third-party package to install MMDetection.
 
