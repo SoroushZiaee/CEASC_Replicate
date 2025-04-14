@@ -3,7 +3,9 @@ import torch
 import torch.nn as nn
 import torchvision.ops as ops
 import torch.nn.functional as F
-from torchvision.ops import box_iou, generalized_box_iou_loss
+from torchvision.ops import box_iou, generalized_box_iou
+
+from utils.loss_utils import decode_dfl_bins, prepare_predictions
 
 
 class Lnorm(nn.Module):
@@ -38,18 +40,7 @@ class Lamm(torch.nn.Module):
 
     def forward(
         self, h_masks, label, im_dimx=1333, im_dimy=800
-        ):  # NOTE dimension defaults set based on the paper specifications for visdrone
-        """
-        Args:
-            h_masks: List[[Tensor]] - soft masks from AMM
-            label: List[[Tensor]] - ground truth bounding boxes for each image in the batch
-        Returns:
-            l_amm: torch.Tensor scalar, with gradients, on correct device
-        """
-
-        device = h_masks[0].device # assume all tensors are on the same device
-
-
+    ):  # NOTE dimension defaults set based on the paper specifications for visdrone
         l = []  # will contain the loss for each layer
 
         gt_masks_raw = torch.cat(
@@ -60,16 +51,16 @@ class Lamm(torch.nn.Module):
 
             hi = h_masks[i]  # the soft mask for the ith FPN layer
 
-            w = int(hi.shape[3]) # width of FPN layer
-            h = int(hi.shape[2]) # height of FPN layer
-            b = int(hi.shape[0]) # of items in batch (i.e., batch size)
+            w = int(hi.shape[3])  # width of FPN layer
+            h = int(hi.shape[2])  # height of FPN layer
+            b = int(hi.shape[0])  # of items in batch (i.e., batch size)
 
             tn_pixel = (
                 b * h * w
             )  # the total number of pixels in Hi and GT mask for calculating loss, n_images x height x width
 
             gt_reshaped = torch.zeros(
-                1,1,h,w
+                1, 1, h, w
             )  # the reshaped version of the ground truth mask, initialized as zeros
 
             scale_x = (
@@ -78,14 +69,14 @@ class Lamm(torch.nn.Module):
             scale_y = h / im_dimy
 
             gt_mask_scaled = torch.stack(
-                    (
-                        gt_masks_raw[:, 0] * scale_x,
-                        gt_masks_raw[:, 1] * scale_y,
-                        gt_masks_raw[:, 2] * scale_x,
-                        gt_masks_raw[:, 3] * scale_y,
-                    ),
-                    dim=1,
-                )
+                (
+                    gt_masks_raw[:, 0] * scale_x,
+                    gt_masks_raw[:, 1] * scale_y,
+                    gt_masks_raw[:, 2] * scale_x,
+                    gt_masks_raw[:, 3] * scale_y,
+                ),
+                dim=1,
+            )
 
             # fill the bounding boxes into an empty mask with the shape of Hi -- needs to be done iteratively for each object in the image
             for o in range(gt_mask_scaled.shape[0]):
@@ -94,7 +85,7 @@ class Lamm(torch.nn.Module):
                 x2 = int(torch.clamp(gt_mask_scaled[o, 2].round(), 0, w))
                 y2 = int(torch.clamp(gt_mask_scaled[o, 3].round(), 0, h))
 
-                if x2 <= x1 or y2 <= y1 or x1+x2 >= w or y1+y2 >= h:
+                if x2 <= x1 or y2 <= y1 or x1 + x2 >= w or y1 + y2 >= h:
                     continue  # Skip invalid boxes
 
                 gt_reshaped[0, 0, y1:y2, x1:x2] = 1
@@ -186,338 +177,118 @@ class ATSSMatcher:
         )
 
 
-class DFLLoss(nn.Module):
-    def __init__(self, num_bins: int = 16):
+class QualityFocalLoss(nn.Module):
+    def __init__(self, beta=2.0):
+        super().__init__()
+        self.beta = beta
+
+    def forward(self, pred, target, iou_targets):
+        """
+        Args:
+            pred: [B, N, C] logits
+            target: [B, N] class indices
+            iou_targets: [B, N] IoU scores ∈ [0, 1]
+        """
+        B, N, C = pred.shape
+        target_one_hot = F.one_hot(target, C).float()
+        pred_sigmoid = pred.sigmoid()
+        pt = target_one_hot * pred_sigmoid + (1 - target_one_hot) * (1 - pred_sigmoid)
+        weights = (
+            iou_targets.unsqueeze(-1) * (1 - pt) + (1 - iou_targets.unsqueeze(-1)) * pt
+        ).pow(self.beta)
+        bce_loss = F.binary_cross_entropy_with_logits(
+            pred, target_one_hot, reduction="none"
+        )
+        loss = weights * bce_loss
+
+        num_pos = (target > 0).sum().item()
+        return loss.sum() / max(num_pos, 1)
+
+
+class DistributionFocalLoss(nn.Module):
+    def __init__(self, num_bins=16):
         super().__init__()
         self.num_bins = num_bins
-        self.register_buffer(
-            "bin_centers", torch.arange(num_bins, dtype=torch.float32) + 0.5
-        )
 
-    def forward(self, pred, target):
+    def forward(self, pred, target, pos_mask=None):
         """
-        pred: [N, 4, num_bins] (logits)
-        target: [N, 4] (continuous regression targets in range [0, num_bins])
+        Args:
+            pred: [B, N, 4*num_bins] — raw logits
+            target: [B, N, 4] — ground truth in [0, 1] scale
+            pos_mask: [B, N] — positive mask
         """
-        N = pred.size(0)
-        device = pred.device
-        bin_centers = self.bin_centers.to(device)  # [num_bins]
-
-        pred = pred.view(-1, self.num_bins)  # [N*4, num_bins]
-        target = target.view(-1)  # [N*4]
-
-        left_idx = torch.floor(target).long().clamp(0, self.num_bins - 1)
-        right_idx = (left_idx + 1).clamp(0, self.num_bins - 1)
-        weight_right = target - left_idx.float()
+        B, N, _ = pred.shape
+        pred = pred.view(B, N, 4, self.num_bins)
+        target_scaled = target * (self.num_bins - 1)
+        left_idx = target_scaled.long().clamp(0, self.num_bins - 2)
+        right_idx = left_idx + 1
+        weight_right = target_scaled - left_idx.float()
         weight_left = 1.0 - weight_right
 
-        loss = (
-            F.cross_entropy(pred, left_idx, reduction="none") * weight_left
-            + F.cross_entropy(pred, right_idx, reduction="none") * weight_right
-        )
-        return loss.mean()
+        log_probs = F.log_softmax(pred, dim=-1)  # [B, N, 4, bins]
 
-    def decode(self, pred_logits):
-        """
-        Convert predicted logits [N, 4, num_bins] → expected value → [N, 4]
-        """
-        probs = F.softmax(pred_logits, dim=-1)  # [N, 4, num_bins]
-        bin_centers = self.bin_centers.to(probs.device)
-        return (probs * bin_centers).sum(dim=-1)  # [N, 4]
+        # Get log-probs for left and right bins
+        left_logp = torch.gather(
+            log_probs, dim=-1, index=left_idx.unsqueeze(-1)
+        ).squeeze(-1)
+        right_logp = torch.gather(
+            log_probs, dim=-1, index=right_idx.unsqueeze(-1)
+        ).squeeze(-1)
+
+        loss = -(weight_left * left_logp + weight_right * right_logp)  # [B, N, 4]
+
+        if pos_mask is not None:
+            loss = loss * pos_mask.unsqueeze(-1)
+            num_pos = pos_mask.sum().item() * 4
+        else:
+            num_pos = B * N * 4
+
+        return loss.sum() / max(num_pos, 1)
 
 
-class LDetection(nn.Module):
-    def __init__(self, num_classes: int, num_bins: int = 16, top_k: int = 9):
+class GIoULoss(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.num_classes = num_classes
-        self.num_bins = num_bins
-        self.matcher = ATSSMatcher(top_k=top_k)
-        self.dfl_loss = DFLLoss(num_bins=self.num_bins)
 
-    def forward(self, cls_outs, reg_outs, anchors_per_level, targets):
-        batch_size = cls_outs[0].shape[0]
-        device = cls_outs[0].device
+    def forward(self, pred_deltas, target_boxes, anchors, pos_mask):
+        """
+        Args:
+            pred_deltas: [B, N, 4] ∈ (tx, ty, tw, th)
+            target_boxes: [B, N, 4]
+            anchors: [N, 4]
+            pos_mask: [B, N]
+        """
+        B, N, _ = pred_deltas.shape
+        anchors = anchors.unsqueeze(0).expand(B, N, 4)
+        pred_boxes = self.delta2bbox(anchors, pred_deltas)
 
-        # Move targets to device
-        targets = {
-            "boxes": [boxes.to(device) for boxes in targets["boxes"]],
-            "labels": [labels.to(device) for labels in targets["labels"]],
-            "image_id": targets["image_id"],
-            "orig_size": targets["orig_size"],
-        }
+        total_loss = 0.0
+        total_pos = 0
 
-        print(f"\n🔍 [Device Check] Forward Pass - LDetection")
-        print(f" - cls_outs[0] device: {cls_outs[0].device}")
-        print(f" - reg_outs[0] device: {reg_outs[0].device}")
-        print(f" - anchors_per_level[0] device: {anchors_per_level[0].device}")
-        print(f" - targets['boxes'][0] device: {targets['boxes'][0].device}")
-        print(f" - targets['labels'][0] device: {targets['labels'][0].device}")
+        for b in range(B):
+            pos = pos_mask[b]
+            if pos.sum() == 0:
+                continue
 
-        # Flatten anchors across levels [List[N_i, 4]] -> [N_total, 4]
-        anchors = torch.cat(anchors_per_level, dim=0)
-        print(f" - Flattened anchors device: {anchors.device}")
+            pred_b = pred_boxes[b][pos]
+            target_b = target_boxes[b][pos]
+            giou = generalized_box_iou(pred_b, target_b)
+            loss = 1.0 - giou.diagonal()
+            total_loss += loss.sum()
+            total_pos += len(loss)
 
-        total_cls_loss = 0
-        total_reg_loss = 0
-
-        for i in range(batch_size):
-            print(f"\n  ➤ Image {i}:")
-            print(f"   - targets['boxes'][{i}] shape: {targets['boxes'][i].shape}")
-            print(f"   - targets['labels'][{i}] shape: {targets['labels'][i].shape}")
-
-            cls_preds = self._flatten_cls_preds(cls_outs, i)
-            reg_preds = self._flatten_reg_preds(reg_outs, i)
-
-            print(f"   - cls_preds shape: {cls_preds.shape}")
-            print(f"   - reg_preds shape: {reg_preds.shape}")
-
-            matched_idxs, _ = self.matcher(
-                anchors_per_level, targets["boxes"][i], device=device
-            )
-            print(f"   - matched_idxs shape: {matched_idxs.shape}")
-
-            # Check for potential out-of-bounds indices
-            if matched_idxs.max() >= targets["labels"][i].shape[0]:
-                print(
-                    f"WARNING: matched_idxs max ({matched_idxs.max()}) >= labels size ({targets['labels'][i].shape[0]})"
-                )
-                # Clamp indices to valid range
-                matched_idxs = torch.clamp(
-                    matched_idxs, -1, targets["labels"][i].shape[0] - 1
-                )
-
-            # Get positive indices
-            pos_inds = (matched_idxs >= 0).nonzero(as_tuple=True)[0]
-            print(f"   - Number of positive samples: {pos_inds.numel()}")
-
-            # move gt_boxes and gt_labels to the same device
-            gt_boxes = targets["boxes"][i]
-            gt_labels = targets["labels"][i]
-
-            labels, label_weights, bbox_targets = self._build_targets(
-                matched_idxs, anchors, gt_labels, gt_boxes, device
-            )
-
-            print(
-                f"   - labels shape: {labels.shape}, max: {labels.max()}, min: {labels.min()}"
-            )
-            print(f"   - label_weights shape: {label_weights.shape}")
-            print(f"   - bbox_targets shape: {bbox_targets.shape}")
-
-            # Create targets for classification
-            qfl_targets = torch.zeros_like(cls_preds)
-
-            # Set QFL targets for positive samples
-            if pos_inds.numel() > 0:
-                with torch.no_grad():
-                    # Double-check dimensions before IoU computation
-                    anchor_boxes = anchors[pos_inds]
-                    target_boxes = bbox_targets[pos_inds]
-                    print(f"   - anchor_boxes shape: {anchor_boxes.shape}")
-                    print(f"   - target_boxes shape: {target_boxes.shape}")
-
-                    # Check for NaN or inf values
-                    if (
-                        torch.isnan(anchor_boxes).any()
-                        or torch.isinf(anchor_boxes).any()
-                    ):
-                        print("WARNING: NaN or Inf values in anchor_boxes")
-                        continue
-
-                    if (
-                        torch.isnan(target_boxes).any()
-                        or torch.isinf(target_boxes).any()
-                    ):
-                        print("WARNING: NaN or Inf values in target_boxes")
-                        continue
-
-                    # Check for invalid boxes (width/height <= 0)
-                    invalid_anchors = (anchor_boxes[:, 2] <= anchor_boxes[:, 0]) | (
-                        anchor_boxes[:, 3] <= anchor_boxes[:, 1]
-                    )
-                    invalid_targets = (target_boxes[:, 2] <= target_boxes[:, 0]) | (
-                        target_boxes[:, 3] <= target_boxes[:, 1]
-                    )
-
-                    if invalid_anchors.any():
-                        print(
-                            f"WARNING: {invalid_anchors.sum()} invalid anchor boxes detected"
-                        )
-                        valid_mask = ~invalid_anchors
-                        pos_inds = pos_inds[valid_mask]
-                        if pos_inds.numel() == 0:
-                            continue
-                        anchor_boxes = anchors[pos_inds]
-                        target_boxes = bbox_targets[pos_inds]
-
-                    if invalid_targets.any():
-                        print(
-                            f"WARNING: {invalid_targets.sum()} invalid target boxes detected"
-                        )
-                        valid_mask = ~invalid_targets
-                        pos_inds = pos_inds[valid_mask]
-                        if pos_inds.numel() == 0:
-                            continue
-                        anchor_boxes = anchors[pos_inds]
-                        target_boxes = bbox_targets[pos_inds]
-
-                    # Compute IoUs
-                    ious = box_iou(anchor_boxes, target_boxes).diag()
-
-                    # Check for valid labels
-                    valid_labels = labels[pos_inds]
-                    print(
-                        f"   - valid_labels shape: {valid_labels.shape}, max: {valid_labels.max()}, min: {valid_labels.min()}"
-                    )
-
-                    # Ensure labels are in valid range
-                    valid_indices = (valid_labels >= 0) & (
-                        valid_labels < self.num_classes
-                    )
-                    if not valid_indices.all():
-                        print(
-                            f"WARNING: Found {(~valid_indices).sum()} invalid labels!"
-                        )
-                        valid_pos_inds = pos_inds[valid_indices]
-                        valid_labels = valid_labels[valid_indices]
-                        valid_ious = ious[valid_indices]
-
-                        # Extra safeguard for indexing
-                        for j, (idx, lbl) in enumerate(
-                            zip(valid_pos_inds, valid_labels)
-                        ):
-                            if (
-                                0 <= idx < qfl_targets.shape[0]
-                                and 0 <= lbl < qfl_targets.shape[1]
-                            ):
-                                qfl_targets[idx, lbl] = valid_ious[j].clamp(min=0)
-                    else:
-                        # Extra safeguard for indexing
-                        for j, (idx, lbl) in enumerate(zip(pos_inds, valid_labels)):
-                            if (
-                                0 <= idx < qfl_targets.shape[0]
-                                and 0 <= lbl < qfl_targets.shape[1]
-                            ):
-                                qfl_targets[idx, lbl] = ious[j].clamp(min=0)
-
-            # Classification loss
-            cls_loss = F.binary_cross_entropy_with_logits(
-                cls_preds, qfl_targets, reduction="none"
-            )
-            cls_loss = cls_loss.sum(dim=1)
-
-            # Make sure label_weights has the right shape
-            if cls_loss.shape[0] != label_weights.shape[0]:
-                print(
-                    f"Shape mismatch: cls_loss {cls_loss.shape}, label_weights {label_weights.shape}"
-                )
-                # Resize label_weights to match cls_loss
-                if cls_loss.shape[0] < label_weights.shape[0]:
-                    label_weights = label_weights[: cls_loss.shape[0]]
-                else:
-                    # Pad label_weights if needed
-                    pad_size = cls_loss.shape[0] - label_weights.shape[0]
-                    label_weights = torch.cat(
-                        [label_weights, torch.zeros(pad_size, device=device)]
-                    )
-
-            cls_loss = cls_loss * label_weights
-            total_cls_loss += cls_loss.sum() / label_weights.sum().clamp(min=1.0)
-
-            # Regression loss (GIoU)
-            if pos_inds.numel() > 0:
-                # Use only valid indices
-                valid_pos_inds = pos_inds
-                if "valid_indices" in locals() and not valid_indices.all():
-                    valid_pos_inds = pos_inds[valid_indices]
-
-                if valid_pos_inds.numel() > 0:
-                    print(
-                        f"   - Computing regression loss for {valid_pos_inds.numel()} samples"
-                    )
-                    pred_boxes = self.delta2bbox(
-                        anchors[valid_pos_inds], reg_preds[valid_pos_inds]
-                    )
-                    reg_loss = generalized_box_iou_loss(
-                        pred_boxes, bbox_targets[valid_pos_inds], reduction="mean"
-                    )
-                    total_reg_loss += reg_loss
-                else:
-                    total_reg_loss += 0.0
-            else:
-                total_reg_loss += 0.0
-
-        return {
-            "loss_cls": total_cls_loss / batch_size,
-            "loss_reg": total_reg_loss / batch_size,
-            "loss_total": (total_cls_loss + total_reg_loss) / batch_size,
-        }
-
-    def _flatten_cls_preds(self, cls_outs, index):
-        result = []
-
-        # Track the number of anchors per level
-        self.num_anchors_per_level = []
-
-        for feat in cls_outs:
-            feature_shape = feat[index].shape
-            h, w = feature_shape[1], feature_shape[2]
-            # Number of anchors at this level
-            num_anchors = h * w
-            self.num_anchors_per_level.append(num_anchors)
-
-            # Reshape and add to result
-            result.append(feat[index].permute(1, 2, 0).reshape(-1, self.num_classes))
-
-        return torch.cat(result, dim=0)
-
-    def _flatten_reg_preds(self, reg_outs, index):
-        result = []
-
-        for i, feat in enumerate(reg_outs):
-            # Make sure we're using the same number of anchors per level as in cls_preds
-            result.append(feat[index].permute(1, 2, 0).reshape(-1, 4, self.num_bins))
-
-        return torch.cat(result, dim=0)
-
-    def _build_targets(self, matched_idxs, anchors, gt_labels, gt_boxes, device):
-        num_anchors = anchors.size(0)
-
-        # Make sure these match the number of flattened predictions
-        labels = torch.zeros((num_anchors,), dtype=torch.long, device=device)
-        label_weights = torch.zeros((num_anchors,), dtype=torch.float32, device=device)
-        bbox_targets = torch.zeros_like(anchors)
-
-        pos_mask = matched_idxs >= 0
-        pos_inds = pos_mask.nonzero(as_tuple=True)[0]
-
-        if pos_inds.numel() > 0:
-            matched_gt_boxes = gt_boxes[matched_idxs[pos_inds]]
-            matched_gt_labels = gt_labels[matched_idxs[pos_inds]]
-
-            # Ensure labels are within valid range
-            if matched_gt_labels.max() >= self.num_classes:
-                print(
-                    f"WARNING: Found label {matched_gt_labels.max()} >= num_classes {self.num_classes}"
-                )
-                matched_gt_labels = torch.clamp(
-                    matched_gt_labels, 0, self.num_classes - 1
-                )
-
-            labels[pos_inds] = matched_gt_labels
-            label_weights[pos_inds] = 1.0
-            bbox_targets[pos_inds] = matched_gt_boxes
-
-        return labels, label_weights, bbox_targets
+        return total_loss / max(total_pos, 1)
 
     def delta2bbox(self, anchors, deltas):
-        widths = anchors[:, 2] - anchors[:, 0]
-        heights = anchors[:, 3] - anchors[:, 1]
-        ctr_x = anchors[:, 0] + 0.5 * widths
-        ctr_y = anchors[:, 1] + 0.5 * heights
+        """
+        Decode (tx, ty, tw, th) into (x1, y1, x2, y2)
+        """
+        widths = anchors[:, :, 2] - anchors[:, :, 0]
+        heights = anchors[:, :, 3] - anchors[:, :, 1]
+        ctr_x = anchors[:, :, 0] + 0.5 * widths
+        ctr_y = anchors[:, :, 1] + 0.5 * heights
 
-        dx, dy, dw, dh = deltas[:, 0], deltas[:, 1], deltas[:, 2], deltas[:, 3]
-
+        dx, dy, dw, dh = deltas.unbind(-1)
         pred_ctr_x = dx * widths + ctr_x
         pred_ctr_y = dy * heights + ctr_y
         pred_w = torch.exp(dw) * widths
@@ -528,4 +299,74 @@ class LDetection(nn.Module):
         x2 = pred_ctr_x + 0.5 * pred_w
         y2 = pred_ctr_y + 0.5 * pred_h
 
-        return torch.stack([x1, y1, x2, y2], dim=1)
+        return torch.stack([x1, y1, x2, y2], dim=2)
+
+
+class LDet(nn.Module):
+    def __init__(
+        self, matcher=ATSSMatcher(top_k=9), num_classes=10, num_bins=16, giou_weight=1.0
+    ):
+        super().__init__()
+        self.matcher = matcher
+        self.num_classes = num_classes
+        self.num_bins = num_bins
+        self.qfl = QualityFocalLoss()
+        self.dfl = DistributionFocalLoss(num_bins=num_bins)
+        self.giou = GIoULoss()
+        self.giou_weight = giou_weight
+
+    def forward(self, cls_outs, reg_outs, anchors, targets):
+        device = cls_outs[0].device
+        batch_size = len(targets["boxes"])
+
+        # Ensure anchors are on the correct device
+        anchors = [a.to(device) for a in anchors]
+        all_anchors = torch.cat(anchors, dim=0)  # [N, 4]
+
+        # Match GT to anchors
+        matched_idxs, max_ious = [], []
+        for b in range(batch_size):
+            boxes = targets["boxes"][b].to(device)
+            m_idx, iou = self.matcher(anchors, boxes, device=device)
+            matched_idxs.append(m_idx)
+            max_ious.append(iou)
+        matched_idxs = torch.stack(matched_idxs)
+        max_ious = torch.stack(max_ious)
+
+        # === Target Assignment ===
+        N = all_anchors.size(0)
+        cls_targets = torch.zeros((batch_size, N), dtype=torch.long, device=device)
+        iou_targets = torch.zeros((batch_size, N), dtype=torch.float, device=device)
+        reg_targets = torch.zeros((batch_size, N, 4), dtype=torch.float, device=device)
+
+        for b in range(batch_size):
+            pos_mask = matched_idxs[b] >= 0
+            if pos_mask.any():
+                gt_inds = matched_idxs[b][pos_mask]
+                labels = targets["labels"][b].to(device)
+                boxes = targets["boxes"][b].to(device)
+
+                cls_targets[b, pos_mask] = labels[gt_inds]
+                reg_targets[b, pos_mask] = boxes[gt_inds]
+                iou_targets[b, pos_mask] = max_ious[b][pos_mask]
+
+        # === Prepare predictions ===
+        cls_preds, reg_preds = prepare_predictions(
+            cls_outs, reg_outs, self.num_classes, self.num_bins
+        )
+        pos_mask = matched_idxs >= 0
+
+        # === Losses ===
+        loss_qfl = self.qfl(cls_preds, cls_targets, iou_targets)
+        loss_dfl = self.dfl(reg_preds, reg_targets, pos_mask)
+        reg_deltas = decode_dfl_bins(reg_preds, self.num_bins)
+        loss_giou = self.giou(reg_deltas, reg_targets, all_anchors.to(device), pos_mask)
+
+        total_loss = loss_qfl + loss_dfl + self.giou_weight * loss_giou
+
+        return {
+            "total_loss": total_loss,
+            "qfl": loss_qfl,
+            "dfl": loss_dfl,
+            "giou": loss_giou,
+        }
