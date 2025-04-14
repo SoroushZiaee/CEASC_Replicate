@@ -47,6 +47,7 @@ class Res18FPNCEASC(nn.Module):
             dense_reg_feats_outs.append(dense_reg_feats)
 
         featmap_sizes = [feat.shape[-2:] for feat in cls_outs]
+        print(f"Feature map sizes: {featmap_sizes}")
         anchors = self.detection_heads[0].get_anchors(featmap_sizes)
 
         # for anchor in anchors:

@@ -14,6 +14,8 @@ class CEASC(nn.Module):
         super(CEASC, self).__init__()
 
         # Anchor generator
+        # Define number of anchors per position (3 ratios × 2 scales = 6)
+        self.num_anchors = 6
         # Note: The original code seems to use a custom anchor generator
         self.prior_generator = AnchorGenerator(
             strides=[4, 8, 16, 32, 64],
@@ -61,11 +63,15 @@ class CEASC(nn.Module):
         self.global_reg = nn.Conv2d(in_channels, in_channels, kernel_size=1)
 
         # Final predictino layer (sparse conv)
-        self.cls_pred = nn.Conv2d(in_channels, num_classes, kernel_size=3, padding=1)
+        self.cls_pred = nn.Conv2d(
+            in_channels, self.num_anchors * num_classes, kernel_size=3, padding=1
+        )
 
         # Binning for regression
         self.num_bins = num_bins
-        self.reg_pred = nn.Conv2d(in_channels, 4 * self.num_bins, kernel_size=1)
+        self.reg_pred = nn.Conv2d(
+            in_channels, self.num_anchors * 4 * self.num_bins, kernel_size=1
+        )
 
     def get_anchors(self, featmap_sizes):
         device = next(self.parameters()).device  # auto-detect the device
@@ -74,7 +80,9 @@ class CEASC(nn.Module):
 
     def forward(self, x, stage: str = "train"):
         # compute masks
-        mask_hard, mask_soft = self.amm(x, stage) # only one AMM module for both classification and regression
+        mask_hard, mask_soft = self.amm(
+            x, stage
+        )  # only one AMM module for both classification and regression
         # reg_mask_hard, reg_mask_soft = self.reg_amm(x, stage)
 
         # global features and pointwise conv
