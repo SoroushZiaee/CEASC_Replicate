@@ -8,15 +8,17 @@ from mmdet.models.task_modules.prior_generators import AnchorGenerator
 
 
 class CEASC(nn.Module):
-    def __init__(self, in_channels, out_channels, num_classes: int = 10):
+    def __init__(
+        self, in_channels, out_channels, num_classes: int = 10, num_bins: int = 16
+    ):
         super(CEASC, self).__init__()
 
         # Anchor generator
         # Note: The original code seems to use a custom anchor generator
         self.prior_generator = AnchorGenerator(
             strides=[4, 8, 16, 32, 64],
-            ratios=[1.0],
-            scales=[8],
+            ratios=[0.5, 1.0, 2.0],
+            scales=[8, 16],
             base_sizes=[16, 32, 64, 128, 256],  # matches your FPN levels P3–P7
         )
 
@@ -61,7 +63,10 @@ class CEASC(nn.Module):
 
         # Final predictino layer (sparse conv)
         self.cls_pred = nn.Conv2d(in_channels, num_classes, kernel_size=3, padding=1)
-        self.reg_pred = nn.Conv2d(in_channels, 4, kernel_size=1)
+
+        # Binning for regression
+        self.num_bins = num_bins
+        self.reg_pred = nn.Conv2d(in_channels, 4 * self.num_bins, kernel_size=1)
 
     def get_anchors(self, featmap_sizes):
         device = next(self.parameters()).device  # auto-detect the device

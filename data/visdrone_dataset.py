@@ -58,6 +58,7 @@ class VisDroneDataset(Dataset):
             self.transform = transforms.Compose(
                 [
                     transforms.ToTensor(),
+                    # transforms.Resize((833, 640)),  # Resize to a fixed size
                 ]
             )
 

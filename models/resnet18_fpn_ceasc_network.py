@@ -51,6 +51,9 @@ class Res18FPNCEASC(nn.Module):
         featmap_sizes = [feat.shape[-2:] for feat in cls_outs]
         anchors = self.detection_heads[0].get_anchors(featmap_sizes)
 
+        # for anchor in anchors:
+        #     print(f"Anchor shape: {anchor.shape}")
+
         return (
             cls_outs,
             reg_outs,
