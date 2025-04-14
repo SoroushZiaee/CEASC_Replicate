@@ -24,7 +24,7 @@ class Lnorm(nn.Module):
 
         for i in range(len(f)):  # FPN levels
             for j in range(len(f[i])):  # branches (usually 4)
-                diff = c[i][j] * h[i][j] - f[i][j]
+                diff = c[i][j] * h[i] - f[i][j]
                 loss += torch.mean(diff**2)
 
         loss = loss / (len(f) * len(f[0]))
