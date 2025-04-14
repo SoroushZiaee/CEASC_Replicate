@@ -13,7 +13,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from models import Res18FPNCEASC  # Adjust as needed
-from utils.dataset import get_dataset
+from utils.visdrone_dataloader import get_dataset
 from utils.losses import Lnorm, Lamm  # Adjust as needed
 
 
@@ -50,7 +50,7 @@ def train(config):
     model.train()
 
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate) 
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # Losses
     l_norm = Lnorm()
@@ -97,9 +97,7 @@ def train(config):
                 print(f"--- FPN Level {i} ---")
                 print(f"cls_outs[{i}]:              {safe_shape(cls_outs[i])}")
                 print(f"reg_outs[{i}]:              {safe_shape(reg_outs[i])}")
-                print(
-                    f"soft_mask_outs[{i}]:    {safe_shape(soft_mask_outs[i])}"
-                )
+                print(f"soft_mask_outs[{i}]:    {safe_shape(soft_mask_outs[i])}")
                 print(
                     f"sparse_cls_feats[{i}]:      {safe_shape(sparse_cls_feats_outs[i])}"
                 )
