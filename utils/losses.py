@@ -14,7 +14,7 @@ class Lnorm(nn.Module):
         """
         Args:
             c: List[List[Tensor]] - full feature map after conv per level & branch [FPN levels][branches]
-            h: List[List[Tensor]] - soft masks from AMM
+            h: List[[Tensor]] - soft masks from AMM
             f: List[List[Tensor]] - output features from CE-GN
         Returns:
             l_norm: torch.Tensor scalar, with gradients, on correct device
@@ -39,6 +39,17 @@ class Lamm(torch.nn.Module):
     def forward(
         self, h_masks, label, im_dimx=1333, im_dimy=800
         ):  # NOTE dimension defaults set based on the paper specifications for visdrone
+        """
+        Args:
+            h_masks: List[[Tensor]] - soft masks from AMM
+            label: List[[Tensor]] - ground truth bounding boxes for each image in the batch
+        Returns:
+            l_amm: torch.Tensor scalar, with gradients, on correct device
+        """
+
+        device = h_masks[0].device # assume all tensors are on the same device
+
+
         l = []  # will contain the loss for each layer
 
         gt_masks_raw = torch.cat(
@@ -95,7 +106,7 @@ class Lamm(torch.nn.Module):
 
         # Final AMM loss = average across FPN levels
         l_amm = sum(l) / len(l)
-        return l_amm
+        return l_amm.to(device)
 
 
 class ATSSMatcher:
