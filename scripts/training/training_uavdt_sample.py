@@ -45,7 +45,7 @@ def train(config):
     )
 
     # Model
-    model = Res18FPNCEASC(config_path=config["config_path"], num_classes=10)
+    model = Res18FPNCEASC(config_path=config["config_path"], num_classes=3)
     model.to(device)
     model.train()
 
@@ -83,8 +83,7 @@ def train(config):
             (
                 cls_outs,
                 reg_outs,
-                cls_soft_mask_outs,
-                reg_soft_mask_outs,
+                soft_mask_outs,
                 sparse_cls_feats_outs,
                 sparse_reg_feats_outs,
                 dense_cls_feats_outs,
@@ -99,10 +98,7 @@ def train(config):
                 print(f"cls_outs[{i}]:              {safe_shape(cls_outs[i])}")
                 print(f"reg_outs[{i}]:              {safe_shape(reg_outs[i])}")
                 print(
-                    f"cls_soft_mask_outs[{i}]:    {safe_shape(cls_soft_mask_outs[i])}"
-                )
-                print(
-                    f"reg_soft_mask_outs[{i}]:    {safe_shape(reg_soft_mask_outs[i])}"
+                    f"soft_mask_outs[{i}]:    {safe_shape(soft_mask_outs[i])}"
                 )
                 print(
                     f"sparse_cls_feats[{i}]:      {safe_shape(sparse_cls_feats_outs[i])}"
@@ -122,11 +118,11 @@ def train(config):
                 print(f"P{i+3} Anchors shape: {anchor.shape}")
 
             loss_norm = l_norm(
-                sparse_cls_feats_outs, cls_soft_mask_outs, dense_cls_feats_outs
+                sparse_cls_feats_outs, soft_mask_outs, dense_cls_feats_outs
             )
 
             loss_amm = l_amm(
-                targets["boxes"], reg_soft_mask_outs
+                soft_mask_outs, targets["boxes"]
             )  # used the soft masks in this version, might be incorrect
 
             print(f"Loss Norm: {loss_norm.item()}")

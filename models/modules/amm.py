@@ -22,9 +22,7 @@ class AMM_module(torch.nn.Module):
             )  # make sure training or testing mode for amm is set
         si = self.conv(xi)
         if mode == "train":
-            # This returns a non-learnable, CPU-based tensor, possibly on the wrong device, and disconnected from PyTorch's autograd.
-            # g1 = torch.from_numpy(np.random.gumbel(size=si.size())) # make random Gumbel noise
-            # g2 = torch.from_numpy(np.random.gumbel(size=si.size()))
+            # make random Gumbel Noise 
             g1 = -torch.empty_like(si).exponential_().log()
             g2 = -torch.empty_like(si).exponential_().log()
 
@@ -34,13 +32,9 @@ class AMM_module(torch.nn.Module):
             hi_hard = (
                 hi_soft >= 0.5
             ).float()  # make a binary mask from soft values -- hard thresholding
-            # hi[hard] = 1
-            # hi[~hard] = 0
         else:
             hi_soft = torch.empty_like(si)  # baseline for the binary mask
             hi_hard = (si > 0).float()
-            # hi_hard[hard] = 1  # set all the values where si > 0 to 1
-            # hi_hard[~hard] = 0  # set all the values where si < 0 to 0
 
-        # Return both hard and soft masks for calculating Loss
+        # Return both hard mask for making predictions and soft masks for calculating Loss
         return hi_hard, hi_soft

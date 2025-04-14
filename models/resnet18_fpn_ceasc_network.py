@@ -21,7 +21,7 @@ class Res18FPNCEASC(nn.Module):
         # anchors = self.detection_heads[0].get_anchors(featmap_sizes)
 
         cls_outs, reg_outs = [], []
-        cls_soft_mask_outs, reg_soft_mask_outs = [], []
+        soft_mask_outs = []
 
         sparse_cls_feats_outs, sparse_reg_feats_outs = [], []
         dense_cls_feats_outs, dense_reg_feats_outs = [], []
@@ -30,8 +30,7 @@ class Res18FPNCEASC(nn.Module):
             (
                 cls_out,
                 reg_out,
-                cls_soft_mask,
-                reg_soft_mask,
+                soft_mask,
                 sparse_cls_feats,
                 sparse_reg_feats,
                 dense_cls_feats,
@@ -40,8 +39,7 @@ class Res18FPNCEASC(nn.Module):
 
             cls_outs.append(cls_out)
             reg_outs.append(reg_out)
-            cls_soft_mask_outs.append(cls_soft_mask)
-            reg_soft_mask_outs.append(reg_soft_mask)
+            soft_mask_outs.append(soft_mask)
 
             sparse_cls_feats_outs.append(sparse_cls_feats)
             sparse_reg_feats_outs.append(sparse_reg_feats)
@@ -57,8 +55,7 @@ class Res18FPNCEASC(nn.Module):
         return (
             cls_outs,
             reg_outs,
-            cls_soft_mask_outs,
-            reg_soft_mask_outs,
+            soft_mask_outs,
             sparse_cls_feats_outs,
             sparse_reg_feats_outs,
             dense_cls_feats_outs,

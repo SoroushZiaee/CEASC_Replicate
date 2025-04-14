@@ -19,12 +19,11 @@ class CEASC(nn.Module):
             strides=[4, 8, 16, 32, 64],
             ratios=[0.5, 1.0, 2.0],
             scales=[8, 16],
-            base_sizes=[16, 32, 64, 128, 256],  # matches your FPN levels P3–P7
+            base_sizes=[16, 32, 64, 128, 256],  # matches our FPN levels P3–P7
         )
 
         # AMM modules here:
-        self.cls_amm = AMM_module()
-        self.reg_amm = AMM_module()
+        self.amm = AMM_module()
 
         # 4*CESC module
         self.cls_convs = nn.Sequential(
@@ -75,8 +74,8 @@ class CEASC(nn.Module):
 
     def forward(self, x, stage: str = "train"):
         # compute masks
-        cls_mask_hard, cls_mask_soft = self.cls_amm(x, stage)
-        reg_mask_hard, reg_mask_soft = self.reg_amm(x, stage)
+        mask_hard, mask_soft = self.amm(x, stage) # only one AMM module for both classification and regression
+        # reg_mask_hard, reg_mask_soft = self.reg_amm(x, stage)
 
         # global features and pointwise conv
         global_context = F.adaptive_avg_pool2d(x, (1, 1))
@@ -88,13 +87,13 @@ class CEASC(nn.Module):
         sparse_cls_feats = []  # F_{i,j}
         cls_feat = x
         for cesc in self.cls_convs:
-            cls_feat = cesc(cls_feat, cls_mask_hard, global_cls)
+            cls_feat = cesc(cls_feat, mask_hard, global_cls)
             sparse_cls_feats.append(cls_feat)
 
         reg_feat = x
         sparse_reg_feats = []  # F_{i,j}
         for cesc in self.reg_convs:
-            reg_feat = cesc(reg_feat, reg_mask_hard, global_reg)
+            reg_feat = cesc(reg_feat, mask_hard, global_reg)
             sparse_reg_feats.append(reg_feat)
 
         # dense layers
@@ -117,8 +116,7 @@ class CEASC(nn.Module):
         return (
             cls_out,
             reg_out,  # final predictions
-            cls_mask_soft,
-            reg_mask_soft,  # for Lamm loss because sigmoid is differentiable but the hard thresholding is not
+            mask_soft,  # for Lamm loss because sigmoid is differentiable but the hard thresholding is not
             sparse_cls_feats,
             sparse_reg_feats,  # F_{i,j}
             cls_feat_dense,
