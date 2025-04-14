@@ -32,38 +32,41 @@ class Lnorm(nn.Module):
 
 
 class Lamm(torch.nn.Module):
-    def __init__(self, *args, **kwargs):
-        super(Lamm).__init__(*args, **kwargs)
+    def __init__(self):
+        super(Lamm, self).__init__()
+        return print("Lamm init called")
 
     def forward(
-        self, h, label, im_dimx=800, im_dimy=1333
-    ):  # NOTE dimension defaults set based on the paper specifications for visdrone
+        self, h_masks, label, im_dimx=1333, im_dimy=800
+        ):  # NOTE dimension defaults set based on the paper specifications for visdrone
         l = []  # will contain the loss for each layer
 
         gt_masks_raw = torch.cat(
             label, dim=0
-        )  # concatenate the features along the 0th dimension, just a big tensor of mask parameters
+        )  # concatenate the features along the 0th dimension, just a big tensor of mask parameters, n_objects x 4
 
-        for i in range(len(h)):  # for each layer of the FPN
+        for i in range(len(h_masks)):  # for each layer of the FPN
 
-            hi = h[i]  # the soft mask for the ith FPN layer
+            hi = h_masks[i]  # the soft mask for the ith FPN layer
+
+            w = int(hi.shape[3]) # width of FPN layer
+            h = int(hi.shape[2]) # height of FPN layer
+            b = int(hi.shape[0]) # of items in batch (i.e., batch size)
 
             tn_pixel = (
-                hi.shape[0] * hi.shape[2] * hi.shape[3]
-            )  # the total number of pixels in Hi and GT mask for calculating loss
+                b * h * w
+            )  # the total number of pixels in Hi and GT mask for calculating loss, n_images x height x width
 
-            gt_reshaped = torch.zeros_like(
-                hi
+            gt_reshaped = torch.zeros(
+                1,1,h,w
             )  # the reshaped version of the ground truth mask, initialized as zeros
 
             scale_x = (
-                hi.shape[3] / im_dimx
+                w / im_dimx
             )  # the scaling factors to bring the label bounding boxes to the dimensions of FPN
-            scale_y = hi.shape[2] / im_dimy
+            scale_y = h / im_dimy
 
-            for n in len(label):  # for each image in the batch
-                # get new gt mask scaled to the dimensions of Hi
-                gt_mask_scaled = torch.cat(
+            gt_mask_scaled = torch.stack(
                     (
                         gt_masks_raw[:, 0] * scale_x,
                         gt_masks_raw[:, 1] * scale_y,
@@ -73,17 +76,17 @@ class Lamm(torch.nn.Module):
                     dim=1,
                 )
 
-                # fill the bounding boxes into an empty mask with the shape of Hi -- needs to be done iteratively for each object in the image
-                for o in range(gt_mask_scaled.shape[0]):
-                    x1 = int(torch.clamp(gt_mask_scaled[o, 0].round(), 0, W - 1))
-                    y1 = int(torch.clamp(gt_mask_scaled[o, 1].round(), 0, H - 1))
-                    x2 = int(torch.clamp(gt_mask_scaled[o, 2].round(), 0, W))
-                    y2 = int(torch.clamp(gt_mask_scaled[o, 3].round(), 0, H))
+            # fill the bounding boxes into an empty mask with the shape of Hi -- needs to be done iteratively for each object in the image
+            for o in range(gt_mask_scaled.shape[0]):
+                x1 = int(torch.clamp(gt_mask_scaled[o, 0].round(), 0, w - 1))
+                y1 = int(torch.clamp(gt_mask_scaled[o, 1].round(), 0, h - 1))
+                x2 = int(torch.clamp(gt_mask_scaled[o, 2].round(), 0, w))
+                y2 = int(torch.clamp(gt_mask_scaled[o, 3].round(), 0, h))
 
-                    if x2 <= x1 or y2 <= y1:
-                        continue  # Skip invalid boxes
+                if x2 <= x1 or y2 <= y1 or x1+x2 >= w or y1+y2 >= h:
+                    continue  # Skip invalid boxes
 
-                    gt_reshaped[n, 0, y1:y2, x1:x2] = 1
+                gt_reshaped[0, 0, y1:y2, x1:x2] = 1
 
             # Compute pixel-wise activation ratio difference
             pi = torch.sum(gt_reshaped) / tn_pixel

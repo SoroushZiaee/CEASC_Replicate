@@ -73,9 +73,6 @@ class UAVDTDataset(Dataset):
         Returns:
             Dictionary containing image and annotation information
         """
-        # splits = self.imgs[idx].split('\\')
-        # img_path = splits[0] # get the path without the \n character
-        # print(img_path)
         img_path = self.imgs[idx].strip()
 
         # Load the image
