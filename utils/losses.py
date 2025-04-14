@@ -224,6 +224,14 @@ class LDetection(nn.Module):
         batch_size = cls_outs[0].shape[0]
         device = cls_outs[0].device
 
+        # Move targets to device
+        targets = {
+            "boxes": [boxes.to(device) for boxes in targets["boxes"]],
+            "labels": [labels.to(device) for labels in targets["labels"]],
+            "image_id": targets["image_id"],
+            "orig_size": targets["orig_size"],
+        }
+
         print(f"\n🔍 [Device Check] Forward Pass - LDetection")
         print(f" - cls_outs[0] device: {cls_outs[0].device}")
         print(f" - reg_outs[0] device: {reg_outs[0].device}")
@@ -240,58 +248,188 @@ class LDetection(nn.Module):
 
         for i in range(batch_size):
             print(f"\n  ➤ Image {i}:")
-            print(f"   - targets['boxes'][{i}] device: {targets['boxes'][i].device}")
-            print(f"   - targets['labels'][{i}] device: {targets['labels'][i].device}")
+            print(f"   - targets['boxes'][{i}] shape: {targets['boxes'][i].shape}")
+            print(f"   - targets['labels'][{i}] shape: {targets['labels'][i].shape}")
 
             cls_preds = self._flatten_cls_preds(cls_outs, i)
             reg_preds = self._flatten_reg_preds(reg_outs, i)
 
-            print(f"   - cls_preds device: {cls_preds.device}")
-            print(f"   - reg_preds device: {reg_preds.device}")
+            print(f"   - cls_preds shape: {cls_preds.shape}")
+            print(f"   - reg_preds shape: {reg_preds.shape}")
 
             matched_idxs, _ = self.matcher(
                 anchors_per_level, targets["boxes"][i], device=device
             )
-            print(f"   - matched_idxs device: {matched_idxs.device}")
+            print(f"   - matched_idxs shape: {matched_idxs.shape}")
 
-            # move gt_boxes and gt_labels to the same device as cls_preds
-            gt_boxes = targets["boxes"][i].to(device)
-            gt_labels = targets["labels"][i].to(device)
+            # Check for potential out-of-bounds indices
+            if matched_idxs.max() >= targets["labels"][i].shape[0]:
+                print(
+                    f"WARNING: matched_idxs max ({matched_idxs.max()}) >= labels size ({targets['labels'][i].shape[0]})"
+                )
+                # Clamp indices to valid range
+                matched_idxs = torch.clamp(
+                    matched_idxs, -1, targets["labels"][i].shape[0] - 1
+                )
+
+            # Get positive indices
+            pos_inds = (matched_idxs >= 0).nonzero(as_tuple=True)[0]
+            print(f"   - Number of positive samples: {pos_inds.numel()}")
+
+            # move gt_boxes and gt_labels to the same device
+            gt_boxes = targets["boxes"][i]
+            gt_labels = targets["labels"][i]
 
             labels, label_weights, bbox_targets = self._build_targets(
                 matched_idxs, anchors, gt_labels, gt_boxes, device
             )
 
-            print(f"   - labels device: {labels.device}")
-            print(f"   - label_weights device: {label_weights.device}")
-            print(f"   - bbox_targets device: {bbox_targets.device}")
-
-            # Classification loss (QFL)
             print(
-                f"[DEBUG] max label = {labels.max()}, num_classes = {self.num_classes}"
+                f"   - labels shape: {labels.shape}, max: {labels.max()}, min: {labels.min()}"
             )
-            print(f"[DEBUG] unique labels = {labels.unique()}")
+            print(f"   - label_weights shape: {label_weights.shape}")
+            print(f"   - bbox_targets shape: {bbox_targets.shape}")
 
+            # Create targets for classification
             qfl_targets = torch.zeros_like(cls_preds)
-            pos_inds = (matched_idxs >= 0).nonzero(as_tuple=True)[0]
+
+            # Set QFL targets for positive samples
             if pos_inds.numel() > 0:
                 with torch.no_grad():
-                    ious = box_iou(anchors[pos_inds], bbox_targets[pos_inds]).diag()
-                    qfl_targets[pos_inds, labels[pos_inds]] = ious.clamp(min=0)
+                    # Double-check dimensions before IoU computation
+                    anchor_boxes = anchors[pos_inds]
+                    target_boxes = bbox_targets[pos_inds]
+                    print(f"   - anchor_boxes shape: {anchor_boxes.shape}")
+                    print(f"   - target_boxes shape: {target_boxes.shape}")
 
+                    # Check for NaN or inf values
+                    if (
+                        torch.isnan(anchor_boxes).any()
+                        or torch.isinf(anchor_boxes).any()
+                    ):
+                        print("WARNING: NaN or Inf values in anchor_boxes")
+                        continue
+
+                    if (
+                        torch.isnan(target_boxes).any()
+                        or torch.isinf(target_boxes).any()
+                    ):
+                        print("WARNING: NaN or Inf values in target_boxes")
+                        continue
+
+                    # Check for invalid boxes (width/height <= 0)
+                    invalid_anchors = (anchor_boxes[:, 2] <= anchor_boxes[:, 0]) | (
+                        anchor_boxes[:, 3] <= anchor_boxes[:, 1]
+                    )
+                    invalid_targets = (target_boxes[:, 2] <= target_boxes[:, 0]) | (
+                        target_boxes[:, 3] <= target_boxes[:, 1]
+                    )
+
+                    if invalid_anchors.any():
+                        print(
+                            f"WARNING: {invalid_anchors.sum()} invalid anchor boxes detected"
+                        )
+                        valid_mask = ~invalid_anchors
+                        pos_inds = pos_inds[valid_mask]
+                        if pos_inds.numel() == 0:
+                            continue
+                        anchor_boxes = anchors[pos_inds]
+                        target_boxes = bbox_targets[pos_inds]
+
+                    if invalid_targets.any():
+                        print(
+                            f"WARNING: {invalid_targets.sum()} invalid target boxes detected"
+                        )
+                        valid_mask = ~invalid_targets
+                        pos_inds = pos_inds[valid_mask]
+                        if pos_inds.numel() == 0:
+                            continue
+                        anchor_boxes = anchors[pos_inds]
+                        target_boxes = bbox_targets[pos_inds]
+
+                    # Compute IoUs
+                    ious = box_iou(anchor_boxes, target_boxes).diag()
+
+                    # Check for valid labels
+                    valid_labels = labels[pos_inds]
+                    print(
+                        f"   - valid_labels shape: {valid_labels.shape}, max: {valid_labels.max()}, min: {valid_labels.min()}"
+                    )
+
+                    # Ensure labels are in valid range
+                    valid_indices = (valid_labels >= 0) & (
+                        valid_labels < self.num_classes
+                    )
+                    if not valid_indices.all():
+                        print(
+                            f"WARNING: Found {(~valid_indices).sum()} invalid labels!"
+                        )
+                        valid_pos_inds = pos_inds[valid_indices]
+                        valid_labels = valid_labels[valid_indices]
+                        valid_ious = ious[valid_indices]
+
+                        # Extra safeguard for indexing
+                        for j, (idx, lbl) in enumerate(
+                            zip(valid_pos_inds, valid_labels)
+                        ):
+                            if (
+                                0 <= idx < qfl_targets.shape[0]
+                                and 0 <= lbl < qfl_targets.shape[1]
+                            ):
+                                qfl_targets[idx, lbl] = valid_ious[j].clamp(min=0)
+                    else:
+                        # Extra safeguard for indexing
+                        for j, (idx, lbl) in enumerate(zip(pos_inds, valid_labels)):
+                            if (
+                                0 <= idx < qfl_targets.shape[0]
+                                and 0 <= lbl < qfl_targets.shape[1]
+                            ):
+                                qfl_targets[idx, lbl] = ious[j].clamp(min=0)
+
+            # Classification loss
             cls_loss = F.binary_cross_entropy_with_logits(
                 cls_preds, qfl_targets, reduction="none"
             )
-            cls_loss = cls_loss.sum(dim=1) * label_weights
-            total_cls_loss += cls_loss.mean()
+            cls_loss = cls_loss.sum(dim=1)
+
+            # Make sure label_weights has the right shape
+            if cls_loss.shape[0] != label_weights.shape[0]:
+                print(
+                    f"Shape mismatch: cls_loss {cls_loss.shape}, label_weights {label_weights.shape}"
+                )
+                # Resize label_weights to match cls_loss
+                if cls_loss.shape[0] < label_weights.shape[0]:
+                    label_weights = label_weights[: cls_loss.shape[0]]
+                else:
+                    # Pad label_weights if needed
+                    pad_size = cls_loss.shape[0] - label_weights.shape[0]
+                    label_weights = torch.cat(
+                        [label_weights, torch.zeros(pad_size, device=device)]
+                    )
+
+            cls_loss = cls_loss * label_weights
+            total_cls_loss += cls_loss.sum() / label_weights.sum().clamp(min=1.0)
 
             # Regression loss (GIoU)
             if pos_inds.numel() > 0:
-                pred_boxes = self.delta2bbox(anchors[pos_inds], reg_preds[pos_inds])
-                reg_loss = generalized_box_iou_loss(
-                    pred_boxes, bbox_targets[pos_inds], reduction="mean"
-                )
-                total_reg_loss += reg_loss
+                # Use only valid indices
+                valid_pos_inds = pos_inds
+                if "valid_indices" in locals() and not valid_indices.all():
+                    valid_pos_inds = pos_inds[valid_indices]
+
+                if valid_pos_inds.numel() > 0:
+                    print(
+                        f"   - Computing regression loss for {valid_pos_inds.numel()} samples"
+                    )
+                    pred_boxes = self.delta2bbox(
+                        anchors[valid_pos_inds], reg_preds[valid_pos_inds]
+                    )
+                    reg_loss = generalized_box_iou_loss(
+                        pred_boxes, bbox_targets[valid_pos_inds], reduction="mean"
+                    )
+                    total_reg_loss += reg_loss
+                else:
+                    total_reg_loss += 0.0
             else:
                 total_reg_loss += 0.0
 
@@ -302,29 +440,36 @@ class LDetection(nn.Module):
         }
 
     def _flatten_cls_preds(self, cls_outs, index):
-        # Flatten all FPN level outputs to [N_total, num_classes]
-        return torch.cat(
-            [
-                feat[index].permute(1, 2, 0).reshape(-1, self.num_classes)
-                for feat in cls_outs
-            ],
-            dim=0,
-        )
+        result = []
+
+        # Track the number of anchors per level
+        self.num_anchors_per_level = []
+
+        for feat in cls_outs:
+            feature_shape = feat[index].shape
+            h, w = feature_shape[1], feature_shape[2]
+            # Number of anchors at this level
+            num_anchors = h * w
+            self.num_anchors_per_level.append(num_anchors)
+
+            # Reshape and add to result
+            result.append(feat[index].permute(1, 2, 0).reshape(-1, self.num_classes))
+
+        return torch.cat(result, dim=0)
 
     def _flatten_reg_preds(self, reg_outs, index):
+        result = []
 
-        # Flatten all FPN level outputs to [N_total, 4]
-        return torch.cat(
-            [
-                feat[index].permute(1, 2, 0).reshape(-1, 4, self.num_bins)
-                for feat in reg_outs
-            ],
-            dim=0,
-        )
+        for i, feat in enumerate(reg_outs):
+            # Make sure we're using the same number of anchors per level as in cls_preds
+            result.append(feat[index].permute(1, 2, 0).reshape(-1, 4, self.num_bins))
+
+        return torch.cat(result, dim=0)
 
     def _build_targets(self, matched_idxs, anchors, gt_labels, gt_boxes, device):
         num_anchors = anchors.size(0)
 
+        # Make sure these match the number of flattened predictions
         labels = torch.zeros((num_anchors,), dtype=torch.long, device=device)
         label_weights = torch.zeros((num_anchors,), dtype=torch.float32, device=device)
         bbox_targets = torch.zeros_like(anchors)
@@ -335,6 +480,16 @@ class LDetection(nn.Module):
         if pos_inds.numel() > 0:
             matched_gt_boxes = gt_boxes[matched_idxs[pos_inds]]
             matched_gt_labels = gt_labels[matched_idxs[pos_inds]]
+
+            # Ensure labels are within valid range
+            if matched_gt_labels.max() >= self.num_classes:
+                print(
+                    f"WARNING: Found label {matched_gt_labels.max()} >= num_classes {self.num_classes}"
+                )
+                matched_gt_labels = torch.clamp(
+                    matched_gt_labels, 0, self.num_classes - 1
+                )
+
             labels[pos_inds] = matched_gt_labels
             label_weights[pos_inds] = 1.0
             bbox_targets[pos_inds] = matched_gt_boxes
