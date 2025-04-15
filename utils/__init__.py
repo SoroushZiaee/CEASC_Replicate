@@ -3,4 +3,4 @@ from .loss_utils import *
 from .visdrone_dataloader import *
 
 
-__all__ = ["Lnorm", "LDet"]
+__all__ = ["Lnorm", "DetectionLoss"]
