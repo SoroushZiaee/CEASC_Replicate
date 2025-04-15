@@ -32,7 +32,7 @@ root_dir = args.root_dir
 movies = os.listdir(root_dir) 
 movies.sort()
 for movie in movies:
-    if movie != "GT" and movie not in testset:
+    if movie != "GT" and movie not in testset and movie not in valset:
         trainset.append(movie)
 
 set_dict = {"valset": valset,

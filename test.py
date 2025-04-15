@@ -40,12 +40,15 @@
 # print(f"perfect")
 
 
-import torch
-from utils.losses import Lnorm, Lamm
+# import torch
+# from utils.losses import Lnorm, Lamm
 
-l_amm = Lamm()
+# l_amm = Lamm()
 
-print("Lamm base classes:", Lamm.__bases__)
-print("l_amm type:", type(l_amm))
-print("isinstance l_amm of nn.Module:", isinstance(l_amm, torch.nn.Module))
-print("dir(l_amm):", dir(l_amm))
+# print("Lamm base classes:", Lamm.__bases__)
+# print("l_amm type:", type(l_amm))
+# print("isinstance l_amm of nn.Module:", isinstance(l_amm, torch.nn.Module))
+# print("dir(l_amm):", dir(l_amm))
+
+
+
