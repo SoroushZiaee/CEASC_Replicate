@@ -41,9 +41,8 @@ conda env create -f environment.yaml
 ```bash
 conda activate ceasc-env
 ```
----
 
-## 🧪 Verify Installation
+#### 🧪 Verify Installation
 You can verify that core packages are installed properly by running:
 ```bash
 python -c "import torch, mmdet, mmcv, mmengine; print('✅ Environment is ready!')"
