@@ -44,6 +44,8 @@ class Lamm(torch.nn.Module):
     ):  # NOTE dimension defaults set based on the paper specifications for visdrone
         l = []  # will contain the loss for each layer
 
+        device = h_masks[0].device  # assume all tensors are on the same device
+
         gt_masks_raw = torch.cat(
             label, dim=0
         )  # concatenate the features along the 0th dimension, just a big tensor of mask parameters, n_objects x 4
@@ -178,202 +180,202 @@ class ATSSMatcher:
         )
 
 
-# class QualityFocalLoss(nn.Module):
-#     def __init__(self, beta=2.0):
-#         super().__init__()
-#         self.beta = beta
+class LossQualityFocal(nn.Module):
+    def __init__(self, beta=2.0):
+        super().__init__()
+        self.beta = beta
 
-#     def forward(self, pred, target, iou_targets):
-#         """
-#         Args:
-#             pred: [B, N, C] logits
-#             target: [B, N] class indices
-#             iou_targets: [B, N] IoU scores ∈ [0, 1]
-#         """
-#         B, N, C = pred.shape
-#         target_one_hot = F.one_hot(target, C).float()
-#         pred_sigmoid = pred.sigmoid()
-#         pt = target_one_hot * pred_sigmoid + (1 - target_one_hot) * (1 - pred_sigmoid)
-#         weights = (
-#             iou_targets.unsqueeze(-1) * (1 - pt) + (1 - iou_targets.unsqueeze(-1)) * pt
-#         ).pow(self.beta)
-#         bce_loss = F.binary_cross_entropy_with_logits(
-#             pred, target_one_hot, reduction="none"
-#         )
-#         loss = weights * bce_loss
+    def forward(self, pred, target, iou_targets):
+        """
+        Args:
+            pred: [B, N, C] logits
+            target: [B, N] class indices
+            iou_targets: [B, N] IoU scores ∈ [0, 1]
+        """
+        B, N, C = pred.shape
+        target_one_hot = F.one_hot(target, C).float()
+        pred_sigmoid = pred.sigmoid()
+        pt = target_one_hot * pred_sigmoid + (1 - target_one_hot) * (1 - pred_sigmoid)
+        weights = (
+            iou_targets.unsqueeze(-1) * (1 - pt) + (1 - iou_targets.unsqueeze(-1)) * pt
+        ).pow(self.beta)
+        bce_loss = F.binary_cross_entropy_with_logits(
+            pred, target_one_hot, reduction="none"
+        )
+        loss = weights * bce_loss
 
-#         num_pos = (target > 0).sum().item()
-#         return loss.sum() / max(num_pos, 1)
-
-
-# class DistributionFocalLoss(nn.Module):
-#     def __init__(self, num_bins=16):
-#         super().__init__()
-#         self.num_bins = num_bins
-
-#     def forward(self, pred, target, pos_mask=None):
-#         """
-#         Args:
-#             pred: [B, N, 4*num_bins] — raw logits
-#             target: [B, N, 4] — ground truth in [0, 1] scale
-#             pos_mask: [B, N] — positive mask
-#         """
-#         B, N, _ = pred.shape
-#         pred = pred.view(B, N, 4, self.num_bins)
-#         target_scaled = target * (self.num_bins - 1)
-#         left_idx = target_scaled.long().clamp(0, self.num_bins - 2)
-#         right_idx = left_idx + 1
-#         weight_right = target_scaled - left_idx.float()
-#         weight_left = 1.0 - weight_right
-
-#         log_probs = F.log_softmax(pred, dim=-1)  # [B, N, 4, bins]
-
-#         # Get log-probs for left and right bins
-#         left_logp = torch.gather(
-#             log_probs, dim=-1, index=left_idx.unsqueeze(-1)
-#         ).squeeze(-1)
-#         right_logp = torch.gather(
-#             log_probs, dim=-1, index=right_idx.unsqueeze(-1)
-#         ).squeeze(-1)
-
-#         loss = -(weight_left * left_logp + weight_right * right_logp)  # [B, N, 4]
-
-#         if pos_mask is not None:
-#             loss = loss * pos_mask.unsqueeze(-1)
-#             num_pos = pos_mask.sum().item() * 4
-#         else:
-#             num_pos = B * N * 4
-
-#         return loss.sum() / max(num_pos, 1)
+        num_pos = (target > 0).sum().item()
+        return loss.sum() / max(num_pos, 1)
 
 
-# class GIoULoss(nn.Module):
-#     def __init__(self):
-#         super().__init__()
+class LossDistributionFocal(nn.Module):
+    def __init__(self, num_bins=16):
+        super().__init__()
+        self.num_bins = num_bins
 
-#     def forward(self, pred_deltas, target_boxes, anchors, pos_mask):
-#         """
-#         Args:
-#             pred_deltas: [B, N, 4] ∈ (tx, ty, tw, th)
-#             target_boxes: [B, N, 4]
-#             anchors: [N, 4]
-#             pos_mask: [B, N]
-#         """
-#         B, N, _ = pred_deltas.shape
-#         anchors = anchors.unsqueeze(0).expand(B, N, 4)
-#         pred_boxes = self.delta2bbox(anchors, pred_deltas)
+    def forward(self, pred, target, pos_mask=None):
+        """
+        Args:
+            pred: [B, N, 4*num_bins] — raw logits
+            target: [B, N, 4] — ground truth in [0, 1] scale
+            pos_mask: [B, N] — positive mask
+        """
+        B, N, _ = pred.shape
+        pred = pred.view(B, N, 4, self.num_bins)
+        target_scaled = target * (self.num_bins - 1)
+        left_idx = target_scaled.long().clamp(0, self.num_bins - 2)
+        right_idx = left_idx + 1
+        weight_right = target_scaled - left_idx.float()
+        weight_left = 1.0 - weight_right
 
-#         total_loss = 0.0
-#         total_pos = 0
+        log_probs = F.log_softmax(pred, dim=-1)  # [B, N, 4, bins]
 
-#         for b in range(B):
-#             pos = pos_mask[b]
-#             if pos.sum() == 0:
-#                 continue
+        # Get log-probs for left and right bins
+        left_logp = torch.gather(
+            log_probs, dim=-1, index=left_idx.unsqueeze(-1)
+        ).squeeze(-1)
+        right_logp = torch.gather(
+            log_probs, dim=-1, index=right_idx.unsqueeze(-1)
+        ).squeeze(-1)
 
-#             pred_b = pred_boxes[b][pos]
-#             target_b = target_boxes[b][pos]
-#             giou = generalized_box_iou(pred_b, target_b)
-#             loss = 1.0 - giou.diagonal()
-#             total_loss += loss.sum()
-#             total_pos += len(loss)
+        loss = -(weight_left * left_logp + weight_right * right_logp)  # [B, N, 4]
 
-#         return total_loss / max(total_pos, 1)
+        if pos_mask is not None:
+            loss = loss * pos_mask.unsqueeze(-1)
+            num_pos = pos_mask.sum().item() * 4
+        else:
+            num_pos = B * N * 4
 
-#     def delta2bbox(self, anchors, deltas):
-#         """
-#         Decode (tx, ty, tw, th) into (x1, y1, x2, y2)
-#         """
-#         widths = anchors[:, :, 2] - anchors[:, :, 0]
-#         heights = anchors[:, :, 3] - anchors[:, :, 1]
-#         ctr_x = anchors[:, :, 0] + 0.5 * widths
-#         ctr_y = anchors[:, :, 1] + 0.5 * heights
-
-#         dx, dy, dw, dh = deltas.unbind(-1)
-#         pred_ctr_x = dx * widths + ctr_x
-#         pred_ctr_y = dy * heights + ctr_y
-#         pred_w = torch.exp(dw) * widths
-#         pred_h = torch.exp(dh) * heights
-
-#         x1 = pred_ctr_x - 0.5 * pred_w
-#         y1 = pred_ctr_y - 0.5 * pred_h
-#         x2 = pred_ctr_x + 0.5 * pred_w
-#         y2 = pred_ctr_y + 0.5 * pred_h
-
-#         return torch.stack([x1, y1, x2, y2], dim=2)
+        return loss.sum() / max(num_pos, 1)
 
 
-# class LDet(nn.Module):
-#     def __init__(
-#         self, matcher=ATSSMatcher(top_k=9), num_classes=10, num_bins=16, giou_weight=1.0
-#     ):
-#         super().__init__()
-#         self.matcher = matcher
-#         self.num_classes = num_classes
-#         self.num_bins = num_bins
-#         self.qfl = QualityFocalLoss()
-#         self.dfl = DistributionFocalLoss(num_bins=num_bins)
-#         self.giou = GIoULoss()
-#         self.giou_weight = giou_weight
+class LossGIoU(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-#     def forward(self, cls_outs, reg_outs, anchors, targets):
-#         device = cls_outs[0].device
-#         batch_size = len(targets["boxes"])
+    def forward(self, pred_deltas, target_boxes, anchors, pos_mask):
+        """
+        Args:
+            pred_deltas: [B, N, 4] ∈ (tx, ty, tw, th)
+            target_boxes: [B, N, 4]
+            anchors: [N, 4]
+            pos_mask: [B, N]
+        """
+        B, N, _ = pred_deltas.shape
+        anchors = anchors.unsqueeze(0).expand(B, N, 4)
+        pred_boxes = self.delta2bbox(anchors, pred_deltas)
 
-#         # Ensure anchors are on the correct device
-#         anchors = [a.to(device) for a in anchors]
-#         all_anchors = torch.cat(anchors, dim=0)  # [N, 4]
+        total_loss = 0.0
+        total_pos = 0
 
-#         # Match GT to anchors
-#         matched_idxs, max_ious = [], []
-#         for b in range(batch_size):
-#             boxes = targets["boxes"][b].to(device)
-#             m_idx, iou = self.matcher(anchors, boxes, device=device)
-#             matched_idxs.append(m_idx)
-#             max_ious.append(iou)
-#         matched_idxs = torch.stack(matched_idxs)
-#         max_ious = torch.stack(max_ious)
+        for b in range(B):
+            pos = pos_mask[b]
+            if pos.sum() == 0:
+                continue
 
-#         # === Target Assignment ===
-#         N = all_anchors.size(0)
-#         cls_targets = torch.zeros((batch_size, N), dtype=torch.long, device=device)
-#         iou_targets = torch.zeros((batch_size, N), dtype=torch.float, device=device)
-#         reg_targets = torch.zeros((batch_size, N, 4), dtype=torch.float, device=device)
+            pred_b = pred_boxes[b][pos]
+            target_b = target_boxes[b][pos]
+            giou = generalized_box_iou(pred_b, target_b)
+            loss = 1.0 - giou.diagonal()
+            total_loss += loss.sum()
+            total_pos += len(loss)
 
-#         for b in range(batch_size):
-#             pos_mask = matched_idxs[b] >= 0
-#             if pos_mask.any():
-#                 gt_inds = matched_idxs[b][pos_mask]
-#                 labels = targets["labels"][b].to(device)
-#                 boxes = targets["boxes"][b].to(device)
+        return total_loss / max(total_pos, 1)
 
-#                 cls_targets[b, pos_mask] = labels[gt_inds]
-#                 reg_targets[b, pos_mask] = boxes[gt_inds]
-#                 iou_targets[b, pos_mask] = max_ious[b][pos_mask]
+    def delta2bbox(self, anchors, deltas):
+        """
+        Decode (tx, ty, tw, th) into (x1, y1, x2, y2)
+        """
+        widths = anchors[:, :, 2] - anchors[:, :, 0]
+        heights = anchors[:, :, 3] - anchors[:, :, 1]
+        ctr_x = anchors[:, :, 0] + 0.5 * widths
+        ctr_y = anchors[:, :, 1] + 0.5 * heights
 
-#         # === Prepare predictions ===
-#         cls_preds, reg_preds = prepare_predictions(
-#             cls_outs, reg_outs, self.num_classes, self.num_bins
-#         )
-#         pos_mask = matched_idxs >= 0
+        dx, dy, dw, dh = deltas.unbind(-1)
+        pred_ctr_x = dx * widths + ctr_x
+        pred_ctr_y = dy * heights + ctr_y
+        pred_w = torch.exp(dw) * widths
+        pred_h = torch.exp(dh) * heights
 
-#         # === Losses ===
-#         loss_qfl = self.qfl(cls_preds, cls_targets, iou_targets)
-#         loss_dfl = self.dfl(reg_preds, reg_targets, pos_mask)
-#         # clamp our dfl loss
-#         loss_dfl = loss_dfl.clamp(min=0, max=1.0)
+        x1 = pred_ctr_x - 0.5 * pred_w
+        y1 = pred_ctr_y - 0.5 * pred_h
+        x2 = pred_ctr_x + 0.5 * pred_w
+        y2 = pred_ctr_y + 0.5 * pred_h
 
-#         reg_deltas = decode_dfl_bins(reg_preds, self.num_bins)
-#         loss_giou = self.giou(reg_deltas, reg_targets, all_anchors.to(device), pos_mask)
+        return torch.stack([x1, y1, x2, y2], dim=2)
 
-#         total_loss = loss_qfl + loss_dfl + self.giou_weight * loss_giou
 
-#         return {
-#             "total_loss": total_loss,
-#             "qfl": loss_qfl,
-#             "dfl": loss_dfl,
-#             "giou": loss_giou,
-#         }
+class LDet(nn.Module):
+    def __init__(
+        self, matcher=ATSSMatcher(top_k=9), num_classes=10, num_bins=16, giou_weight=1.0
+    ):
+        super().__init__()
+        self.matcher = matcher
+        self.num_classes = num_classes
+        self.num_bins = num_bins
+        self.qfl = LossQualityFocal()
+        self.dfl = LossDistributionFocal(num_bins=num_bins)
+        self.giou = LossGIoU()
+        self.giou_weight = giou_weight
+
+    def forward(self, cls_outs, reg_outs, anchors, targets):
+        device = cls_outs[0].device
+        batch_size = len(targets["boxes"])
+
+        # Ensure anchors are on the correct device
+        anchors = [a.to(device) for a in anchors]
+        all_anchors = torch.cat(anchors, dim=0)  # [N, 4]
+
+        # Match GT to anchors
+        matched_idxs, max_ious = [], []
+        for b in range(batch_size):
+            boxes = targets["boxes"][b].to(device)
+            m_idx, iou = self.matcher(anchors, boxes, device=device)
+            matched_idxs.append(m_idx)
+            max_ious.append(iou)
+        matched_idxs = torch.stack(matched_idxs)
+        max_ious = torch.stack(max_ious)
+
+        # === Target Assignment ===
+        N = all_anchors.size(0)
+        cls_targets = torch.zeros((batch_size, N), dtype=torch.long, device=device)
+        iou_targets = torch.zeros((batch_size, N), dtype=torch.float, device=device)
+        reg_targets = torch.zeros((batch_size, N, 4), dtype=torch.float, device=device)
+
+        for b in range(batch_size):
+            pos_mask = matched_idxs[b] >= 0
+            if pos_mask.any():
+                gt_inds = matched_idxs[b][pos_mask]
+                labels = targets["labels"][b].to(device)
+                boxes = targets["boxes"][b].to(device)
+
+                cls_targets[b, pos_mask] = labels[gt_inds]
+                reg_targets[b, pos_mask] = boxes[gt_inds]
+                iou_targets[b, pos_mask] = max_ious[b][pos_mask]
+
+        # === Prepare predictions ===
+        cls_preds, reg_preds = prepare_predictions(
+            cls_outs, reg_outs, self.num_classes, self.num_bins
+        )
+        pos_mask = matched_idxs >= 0
+
+        # === Losses ===
+        loss_qfl = self.qfl(cls_preds, cls_targets, iou_targets)
+        loss_dfl = self.dfl(reg_preds, reg_targets, pos_mask)
+        # clamp our dfl loss
+        loss_dfl = loss_dfl.clamp(min=0, max=1.0)
+
+        reg_deltas = decode_dfl_bins(reg_preds, self.num_bins)
+        loss_giou = self.giou(reg_deltas, reg_targets, all_anchors.to(device), pos_mask)
+
+        total_loss = loss_qfl + loss_dfl + self.giou_weight * loss_giou
+
+        return {
+            "total_loss": total_loss,
+            "qfl": loss_qfl,
+            "dfl": loss_dfl,
+            "giou": loss_giou,
+        }
 
 
 class GFLBBoxCoder:

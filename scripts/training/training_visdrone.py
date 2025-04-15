@@ -15,14 +15,16 @@ sys.path.append(
 import torch
 from torch import nn, optim
 from torch.optim.lr_scheduler import LambdaLR
-from torch.utils.tensorboard import SummaryWriter
+
+# from torch.utils.tensorboard import SummaryWriter
 
 from torchvision import transforms
 from tqdm import tqdm
 
 from models import Res18FPNCEASC  # Adjust as needed
 from utils.visdrone_dataloader import get_dataset
-from utils.losses import Lnorm, Lamm, LDet  # Adjust as needed
+from utils.losses import Lnorm, Lamm, DetectionLoss  # Adjust as needed
+
 
 def safe_shape(x):
     if isinstance(x, torch.Tensor):
@@ -31,25 +33,26 @@ def safe_shape(x):
         return [safe_shape(e) for e in x]
     return type(x)
 
-# get the setup 
+
+# get the setup
 mode = "train"  # Change to "eval" or "test" as needed
 
 config = {
-    "root_dir": "/home/eyakub/scratch/CEASC_replicate",
-    "batch_size": 16,
+    "root_dir": "/home/soroush1/scratch/eecs_project",
+    "batch_size": 4,
     "num_workers": 4,
     "num_epochs": 15,
     "warmup_it": 10,
     "lr": 1e-1,
     "alpha": 1,
     "beta": 10,
-    "config_path": "../configs/resnet18_fpn_feature_extractor.py",
+    "config_path": "configs/resnet18_fpn_feature_extractor.py",
 }
 
 if __name__ == "__main__":
-    # torch.autograd.set_detect_anomaly(True) # for debugging 
+    # torch.autograd.set_detect_anomaly(True) # for debugging
 
-    writer = SummaryWriter()
+    # writer = SummaryWriter()
 
     # Unpack config
     root_dir = config["root_dir"]
@@ -78,23 +81,25 @@ if __name__ == "__main__":
     model.train()
 
     # Optimizer
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate) 
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
     def lr_lambda(it):
-        '''
+        """
         function to control the learning rate - linear warm-up to epoch 11 and 10 x decrease at epochs 12 and 15
-        '''
+        """
         if it <= warmup_it:
-            return float(it+1)/float(max(1,warmup_it+1)) # implement linear warmup up to and including epoch 11 
-        if it == 11 or it ==14:
-            return 0.1 # decrease the lr by a factor of 10 at epochs 12 and 15
+            return float(it + 1) / float(
+                max(1, warmup_it + 1)
+            )  # implement linear warmup up to and including epoch 11
+        if it == 11 or it == 14:
+            return 0.1  # decrease the lr by a factor of 10 at epochs 12 and 15
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
-    
+
     # Losses
     l_amm = Lamm()
     l_norm = Lnorm()
-    l_det = LDet()
+    l_det = DetectionLoss(num_bins=16, num_classes=10, num_anchors=6)
 
     global_it = 0
 
@@ -104,6 +109,15 @@ if __name__ == "__main__":
 
         for batch in progress_bar:
             images = batch["image"].to(device)
+            print(f"{batch['image_id']=}")
+            print(f"{images.size()=}")
+
+            for box in batch["boxes"]:
+                print(f"{box.size()=}")
+            for label in batch["labels"]:
+                print(f"{label.size()=}")
+                print(f"{label.unique()=}")
+
             targets = {
                 "boxes": batch["boxes"],
                 "labels": batch["labels"],
@@ -114,7 +128,7 @@ if __name__ == "__main__":
             optimizer.zero_grad()
 
             with autocast():
-    
+
                 # Forward pass
                 outputs = model(images, stage="train")
                 (
@@ -131,26 +145,28 @@ if __name__ == "__main__":
 
                 loss_amm = l_amm(
                     soft_mask_outs, targets["boxes"], im_dimx=1333, im_dimy=800
-                    ) 
-                
+                )
+
                 loss_norm = l_norm(
                     sparse_cls_feats_outs, soft_mask_outs, dense_cls_feats_outs
-                    )
-                
-                loss_det = l_det(
-                    cls_outs, reg_outs, anchors, targets
-                    )
+                )
 
-                if global_it % 100 == 0:
-                    writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
-                    writer.add_scalar("Norm Loss/train", loss_norm.item(), global_it)
-                    writer.add_scalar("Det Loss/train", loss_det["total_loss"].item(), global_it)
+                loss_det = l_det(cls_outs, reg_outs, anchors, targets, device=device)
 
-                # sum the losses 
-                loss_overall = loss_det + alpha*loss_norm + beta*loss_amm
+                # if global_it % 100 == 0:
+                #     writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
+                #     writer.add_scalar("Norm Loss/train", loss_norm.item(), global_it)
+                #     writer.add_scalar(
+                #         "Det Loss/train", loss_det["total_loss"].item(), global_it
+                #     )
+
+                # sum the losses
+                loss_overall = (
+                    loss_det["total_loss"] + alpha * loss_norm + beta * loss_amm
+                )
 
             scaler.scale(loss_overall).backward()
-    
+
             scaler.step(optimizer)
 
             scaler.update()
@@ -160,10 +176,10 @@ if __name__ == "__main__":
             del loss_amm, loss_norm, loss_det, loss_overall, outputs
 
             torch.cuda.empty_cache()
-        
+
         if (epoch + 1) % 2 == 0:
-            torch.save(model.state_dict(),f'{root_dir}/epoch-{epoch}.pth')
+            torch.save(model.state_dict(), f"{root_dir}/epoch-{epoch}.pth")
 
         scheduler.step()
 
-    writer.close()
+    # writer.close()

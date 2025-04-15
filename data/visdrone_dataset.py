@@ -96,7 +96,10 @@ class VisDroneDataset(Dataset):
                 boxes.append(
                     [x, y, x + width, y + height]
                 )  # Convert to [x1, y1, x2, y2] format
-                labels.append(category_id)
+                if 1 <= category_id <= 10:
+                    labels.append(category_id - 1)
+                else:
+                    continue  # Skip any unexpected category_id
                 visibilities.append(visibility)
                 truncations.append(truncation)
                 occlusions.append(occlusion)
