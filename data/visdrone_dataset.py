@@ -96,6 +96,11 @@ class VisDroneDataset(Dataset):
                 boxes.append(
                     [x, y, x + width, y + height]
                 )  # Convert to [x1, y1, x2, y2] format
+                if category_id < 1 or category_id > 10:
+                    print(
+                        f"[WARNING] Skipping invalid category_id: {category_id} in {anno_path}"
+                    )
+                    continue
                 if 1 <= category_id <= 10:
                     labels.append(category_id - 1)
                 else:
