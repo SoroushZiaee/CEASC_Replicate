@@ -188,7 +188,7 @@ cython_debug/
 *.webp
 
 # ignore tensorboard logs 
-notebooks/runs
+notebooks/runs/
 
 # pickle files 
 *.pickle

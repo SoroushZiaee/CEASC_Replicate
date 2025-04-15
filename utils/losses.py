@@ -359,6 +359,9 @@ class LDet(nn.Module):
         # === Losses ===
         loss_qfl = self.qfl(cls_preds, cls_targets, iou_targets)
         loss_dfl = self.dfl(reg_preds, reg_targets, pos_mask)
+        # clamp our dfl loss
+        loss_dfl = loss_dfl.clamp(min=0, max=1.0)
+
         reg_deltas = decode_dfl_bins(reg_preds, self.num_bins)
         loss_giou = self.giou(reg_deltas, reg_targets, all_anchors.to(device), pos_mask)
 
