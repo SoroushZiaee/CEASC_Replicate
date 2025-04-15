@@ -63,6 +63,40 @@ python scripts/download_uavdt.py
 python scripts/make_meta_uavdt.py --root_dir <insert path to UAV-benchmark-M directory>
 ```
 
+## Test
+### 🧪 **Test Folder Overview**
+
+This `test/` directory is dedicated to validating various components of the CEASC object detection framework. Below is a summary of each script:
+
+#### 🧪 `test_backbone.py`
+- **Purpose:** Verifies the functionality of the ResNet18 + FPN backbone.
+- **Checks:** Shape consistency, multi-scale outputs, and correct layer activations.
+
+#### 🧪 `test_end_to_end_module.py`
+- **Purpose:** Tests the full CEASC detection pipeline from image input to final predictions.
+- **Checks:** Integration of backbone, FPN, AMM, CE-GN, and prediction heads.
+
+#### 🧪 `test_norm_loss.py`
+- **Purpose:** Validates the implementation of the L-norm loss.
+- **Checks:** Output scalar value, differentiability, and device compatibility.
+
+#### 🧪 `test_visdrone_dataset.py`
+- **Purpose:** Loads and checks the VisDrone dataset integration.
+- **Checks:** Dataset length, sample formatting, and bounding box consistency.
+
+```bash
+# Run backbone feature extractor test
+python test/test_backbone.py
+
+# Run end-to-end model test (from image to output)
+python test/test_end_to_end_module.py
+
+# Run L-norm loss unit test
+python test/test_norm_loss.py
+
+# Run dataset loading and inspection test
+python test/test_visdrone_dataset.py
+```
 
 ## Training
 
