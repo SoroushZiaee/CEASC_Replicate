@@ -64,3 +64,9 @@ class Res18FPNCEASC(nn.Module):
             feats,  # dense_feats from FPN (optional)
             anchors,  # anchors from FPN (optional)
         )
+
+    def forward_dummy(self, x):
+        features = self.backbone(x)
+        cls_out = self.cls_head(features)
+        reg_out = self.reg_head(features)
+        return torch.cat([cls_out, reg_out], dim=1)

@@ -1,12 +1,25 @@
+import os
+import sys
+
+# import two folder before current directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 import torch
 import time
 import numpy as np
+from tqdm import tqdm
 
-from models import Res18FPNCEASC  # adjust import path if needed
+from models import (
+    Res18FPNCEASC,
+)  # adjust import path if needed
 
 
 def compute_fps(
-    config_path, input_shape=(3, 1280, 800), num_classes=10, num_iters=100, warmup=10
+    config_path,
+    input_shape=(3, 1280, 800),
+    num_classes=10,
+    num_iters=100,
+    warmup=10,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -24,7 +37,7 @@ def compute_fps(
 
     # Measure inference time
     start_time = time.time()
-    for _ in range(num_iters):
+    for _ in tqdm(range(num_iters)):
         with torch.no_grad():
             model(dummy_input)
     total_time = time.time() - start_time

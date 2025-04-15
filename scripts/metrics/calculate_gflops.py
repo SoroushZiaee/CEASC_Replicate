@@ -1,3 +1,9 @@
+import os
+import sys
+
+# import two folder before current directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 import torch
 import numpy as np
 from mmcv.cnn import get_model_complexity_info
