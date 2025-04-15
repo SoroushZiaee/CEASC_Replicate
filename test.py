@@ -50,5 +50,7 @@
 # print("isinstance l_amm of nn.Module:", isinstance(l_amm, torch.nn.Module))
 # print("dir(l_amm):", dir(l_amm))
 
-
+import torch 
+t = torch.rand(10,5)
+print(torch.argmax(t,dim=1).shape)
 
