@@ -29,6 +29,31 @@ Follow the [instructions](https://mmdetection.readthedocs.io/en/latest/get_start
 
 Note: Use with caution, we won't tell you how to manage your cluster 🙂
 
+### With Conda
+
+#### Create the Conda Environment
+Use the provided `environment.yaml` to create the environment:
+```bash
+conda env create -f environment.yaml
+```
+
+#### Activate the Environment
+```bash
+conda activate ceasc-env
+```
+---
+
+## 🧪 Verify Installation
+You can verify that core packages are installed properly by running:
+```bash
+python -c "import torch, mmdet, mmcv, mmengine; print('✅ Environment is ready!')"
+```
+
+---
+```
+
+Let me know if you want to include a deactivation or removal command too.
+
 ### Loading the Datasets 
 
 #### VisDrone
