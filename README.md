@@ -47,12 +47,6 @@ You can verify that core packages are installed properly by running:
 ```bash
 python -c "import torch, mmdet, mmcv, mmengine; print('✅ Environment is ready!')"
 ```
-
----
-```
-
-Let me know if you want to include a deactivation or removal command too.
-
 ### Loading the Datasets 
 
 #### VisDrone
