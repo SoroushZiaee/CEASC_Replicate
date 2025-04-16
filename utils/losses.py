@@ -107,10 +107,14 @@ class ATSSMatcher:
     def __init__(self, top_k=9):
         self.top_k = top_k  # number of anchors to select per level
 
-    def __call__(self, anchors_per_level, gt_boxes, device=None):
+    def __call__(
+        self, anchors_per_level, gt_boxes, image_size, feature_shapes, device=None
+    ):
         """
         anchors_per_level: List[Tensor[N_i, 4]] in (x1, y1, x2, y2) format
-        gt_boxes: Tensor[M, 4]
+        gt_boxes: Tensor[M, 4] in original image space (x1, y1, x2, y2)
+        image_size: (H, W) original image size
+        feature_shapes: List of (H_i, W_i) for each FPN level
         Returns:
             matched_idxs: Tensor[N_total] with GT index or -1
             max_ious: Tensor[N_total]
@@ -446,6 +450,7 @@ class DetectionLoss(nn.Module):
         return torch.cat(all_cls_preds, dim=1), torch.cat(all_reg_preds, dim=1)
 
     def forward(self, cls_outs, reg_outs, anchors, targets, device):
+        feature_shapes = [feat.shape[-2:] for feat in cls_outs]
         cls_preds, reg_preds = self.prepare_predictions(cls_outs, reg_outs)
         all_anchors = torch.cat(anchors, dim=0).to(device)  # [N_total, 4]
         batch_size = cls_preds.size(0)
@@ -454,7 +459,11 @@ class DetectionLoss(nn.Module):
         matched_idxs, max_ious = [], []
         for i in range(batch_size):
             matched_idx, ious = self.matcher(
-                anchors, targets["boxes"][i].to(device), device=device
+                anchors_per_level=anchors,
+                gt_boxes=targets["boxes"][i].to(device),
+                image_size=targets["orig_size"][i].to(device),
+                feature_shapes=feature_shapes,
+                device=device,
             )
             matched_idxs.append(matched_idx.to(device))
             max_ious.append(ious.to(device))
