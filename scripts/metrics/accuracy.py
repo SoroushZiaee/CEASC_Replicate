@@ -56,7 +56,10 @@ def class_AP(bbox_preds, gt_boxes, threshold_min=0.50, threshold_max=0.95):
         auc = trapezoid(precision,recall)
 
         threshold_aps.append(auc)
-    return threshold_aps
+    
+    aps = np.array(threshold_aps)
+
+    return aps
 
 def get_APs(preds,gt_bs,gt_cs,n_classes):
     '''
@@ -66,10 +69,30 @@ def get_APs(preds,gt_bs,gt_cs,n_classes):
     gt_cs: Tensor[B,A,N_c] class labels for each anchor where N_c = number of classes
     n_classes: scalar, number of classes  
     '''
+    
+    all_aps = np.empty((n_classes,10)) # for 10 thresholds we want to look at 
+
     for c in range(n_classes):
+        pred_bbs_list = []
+        gt_bbs_list = []
         for b in range(len(gt_cs.shape[0])):
             cls_idx = torch.argwhere(gt_cs[b,:,c])
-            
+            for i in range(len(cls_idx)):
+                pred_bbs_list.append(torch.squeeze(preds[b,i,:]))
+                gt_bbs_list.append(torch.squeeze(gt_bs[b,i,:]))
+        
+        pred_bbs = torch.cat(pred_bbs_list,dim=0)
+        gt_bbs = torch.cat(gt_bbs_list,dim=0)
+
+        class_aps = class_AP(pred_bbs,gt_bbs)
+        all_aps[c,:] = class_aps
+    
+    ap50 = np.nanmean(all_aps[:,0])
+    ap75 = np.nanmean(all_aps[:,5])
+
+    maps = np.nanmean(all_aps)
+
+    return ap50, ap75, maps
 
 
 # overall function to make it easy to do this across multiple classes and thresholds

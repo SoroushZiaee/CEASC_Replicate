@@ -24,8 +24,8 @@ from tqdm import tqdm
 from models import Res18FPNCEASC  # Adjust as needed
 from utils.uavdt_dataloader import get_dataset
 
-# from utils.losses import Lnorm, Lamm, LDet  # Adjust as needed
-from utils.losses import Lnorm, Lamm, DetectionLoss  # Adjust as needed
+from utils.losses import Lnorm, Lamm, LDet  # Adjust as needed
+# from utils.losses import Lnorm, Lamm, DetectionLoss  # Adjust as needed
 
 
 def safe_shape(x):
@@ -40,7 +40,7 @@ def safe_shape(x):
 mode = "train"  # Change to "eval" or "test" as needed
 
 config = {
-    "root_dir": "/home/soroush1/scratch/CEASC_replicate",
+    "root_dir": "/home/eyakub/scratch/CEASC_replicate",
     "batch_size": 4,
     "num_workers": 4,
     "num_epochs": 6,
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         split="train",
         transform=None,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
     )
 
@@ -96,8 +96,8 @@ if __name__ == "__main__":
     # Losses
     l_amm = Lamm()
     l_norm = Lnorm()
-    # l_det = LDet(num_classes=3)
-    l_det = DetectionLoss(num_bins=16, num_classes=3, num_anchors=6)
+    l_det = LDet(num_classes=3)
+    # l_det = DetectionLoss(num_bins=16, num_classes=3, num_anchors=6)
 
     global_it = 0
 
@@ -105,7 +105,10 @@ if __name__ == "__main__":
         total_loss = 0.0
         progress_bar = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}")
 
-        for batch in progress_bar:
+        for i, batch in enumerate(progress_bar):
+            print(i)
+            if i in []:
+                continue
             images = batch["image"].to(device)
             targets = {
                 "boxes": batch["boxes"],
@@ -148,7 +151,7 @@ if __name__ == "__main__":
                     sparse_cls_feats_outs, soft_mask_outs, dense_cls_feats_outs
                 )
 
-                loss_det = l_det(cls_outs, reg_outs, anchors, targets, device=device)
+                loss_det = l_det(cls_outs, reg_outs, anchors, targets)
 
                 # if global_it % 1000 == 0:
                 #     writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
