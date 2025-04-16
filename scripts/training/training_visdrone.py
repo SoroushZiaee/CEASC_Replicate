@@ -16,7 +16,7 @@ import torch
 from torch import nn, optim
 from torch.optim.lr_scheduler import LambdaLR
 
-# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from torchvision import transforms
 from tqdm import tqdm
@@ -38,7 +38,7 @@ def safe_shape(x):
 mode = "train"  # Change to "eval" or "test" as needed
 
 config = {
-    "root_dir": "/home/soroush1/scratch/eecs_project",
+    "root_dir": "/home/eyakub/scratch/CEASC_replicate",
     "batch_size": 4,
     "num_workers": 4,
     "num_epochs": 15,
@@ -52,7 +52,7 @@ config = {
 if __name__ == "__main__":
     # torch.autograd.set_detect_anomaly(True) # for debugging
 
-    # writer = SummaryWriter()
+    writer = SummaryWriter()
 
     # Unpack config
     root_dir = config["root_dir"]
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         split="train",
         transform=None,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
     )
 
@@ -108,16 +108,19 @@ if __name__ == "__main__":
         total_loss = 0.0
         progress_bar = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}")
 
-        for batch in progress_bar:
+        for i, batch in enumerate(progress_bar):
+            print(i)
+            if i in []:
+                continue
             images = batch["image"].to(device)
-            print(f"{batch['image_id']=}")
-            print(f"{images.size()=}")
+            # print(f"{batch['image_id']=}")
+            # print(f"{images.size()=}")
 
-            for box in batch["boxes"]:
-                print(f"{box.size()=}")
-            for label in batch["labels"]:
-                print(f"{label.size()=}")
-                print(f"{label.unique()=}")
+            # for box in batch["boxes"]:
+            #     print(f"{box.size()=}")
+            # for label in batch["labels"]:
+            #     print(f"{label.size()=}")
+            #     print(f"{label.unique()=}")
 
             targets = {
                 "boxes": batch["boxes"],
@@ -154,12 +157,12 @@ if __name__ == "__main__":
 
                 loss_det = l_det(cls_outs, reg_outs, anchors, targets, device=device)
 
-                # if global_it % 100 == 0:
-                #     writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
-                #     writer.add_scalar("Norm Loss/train", loss_norm.item(), global_it)
-                #     writer.add_scalar(
-                #         "Det Loss/train", loss_det["total_loss"].item(), global_it
-                #     )
+                if global_it % 100 == 0:
+                    writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
+                    writer.add_scalar("Norm Loss/train", loss_norm.item(), global_it)
+                    writer.add_scalar(
+                        "Det Loss/train", loss_det["total_loss"].item(), global_it
+                    )
 
                 # sum the losses
                 loss_overall = (
@@ -183,4 +186,4 @@ if __name__ == "__main__":
 
         scheduler.step()
 
-    # writer.close()
+    writer.close()
