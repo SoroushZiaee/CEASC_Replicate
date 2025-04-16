@@ -183,21 +183,3 @@ def get_ARs(preds,gt_bs,gt_cs,n_classes):
     ar500 = np.nanmean(ar_store[:,3])
 
     return ar1, ar10, ar100, ar500
-
-
-
-
-
-
-
-# mAP
-
-# AP50 and AP75 
-
-# AR1
-
-# AR10
-
-# AR100
-
-# AR500
