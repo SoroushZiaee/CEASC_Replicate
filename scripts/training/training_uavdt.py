@@ -15,14 +15,18 @@ sys.path.append(
 import torch
 from torch import nn, optim
 from torch.optim.lr_scheduler import LambdaLR
-from torch.utils.tensorboard import SummaryWriter
+
+# from torch.utils.tensorboard import SummaryWriter
 
 from torchvision import transforms
 from tqdm import tqdm
 
 from models import Res18FPNCEASC  # Adjust as needed
 from utils.uavdt_dataloader import get_dataset
-from utils.losses import Lnorm, Lamm, LDet  # Adjust as needed
+
+# from utils.losses import Lnorm, Lamm, LDet  # Adjust as needed
+from utils.losses import Lnorm, Lamm, DetectionLoss  # Adjust as needed
+
 
 def safe_shape(x):
     if isinstance(x, torch.Tensor):
@@ -31,24 +35,25 @@ def safe_shape(x):
         return [safe_shape(e) for e in x]
     return type(x)
 
-# get the setup 
+
+# get the setup
 mode = "train"  # Change to "eval" or "test" as needed
 
 config = {
-    "root_dir": "/home/eyakub/scratch/CEASC_replicate",
+    "root_dir": "/home/soroush1/scratch/CEASC_replicate",
     "batch_size": 4,
     "num_workers": 4,
     "num_epochs": 6,
     "lr": 1e-1,
     "alpha": 1,
     "beta": 10,
-    "config_path": "../configs/resnet18_fpn_feature_extractor.py",
+    "config_path": "configs/resnet18_fpn_feature_extractor.py",
 }
 
 if __name__ == "__main__":
-    # torch.autograd.set_detect_anomaly(True) # for debugging 
+    # torch.autograd.set_detect_anomaly(True) # for debugging
 
-    writer = SummaryWriter()
+    # writer = SummaryWriter()
 
     # Unpack config
     root_dir = config["root_dir"]
@@ -76,21 +81,23 @@ if __name__ == "__main__":
     model.train()
 
     # Optimizer
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate) 
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
     def lr_lambda(it):
-        '''
+        """
         function to control the learning rate - 10 x decrease at epochs 5 and 6
-        ''' 
-        if it == 4 or it ==5:
-            return 0.1 # decrease the lr by a factor of 10 at epochs 12 and 15
+        """
+        if it == 4 or it == 5:
+            return 0.1  # decrease the lr by a factor of 10 at epochs 12 and 15
+        return 1
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
-    
+
     # Losses
     l_amm = Lamm()
     l_norm = Lnorm()
-    l_det = LDet(num_classes=3)
+    # l_det = LDet(num_classes=3)
+    l_det = DetectionLoss(num_bins=16, num_classes=3, num_anchors=6)
 
     global_it = 0
 
@@ -107,10 +114,18 @@ if __name__ == "__main__":
                 "orig_size": batch["orig_size"],
             }
 
+            continue_to_next_batch = False
+            for box in targets["boxes"]:
+                if len(box) == 0:
+                    continue_to_next_batch = True
+
+            if continue_to_next_batch:
+                continue
+
             optimizer.zero_grad()
 
             with autocast():
-    
+
                 # Forward pass
                 outputs = model(images, stage="train")
                 (
@@ -127,26 +142,28 @@ if __name__ == "__main__":
 
                 loss_amm = l_amm(
                     soft_mask_outs, targets["boxes"], im_dimx=1024, im_dimy=540
-                    ) 
-                
+                )
+
                 loss_norm = l_norm(
                     sparse_cls_feats_outs, soft_mask_outs, dense_cls_feats_outs
-                    )
-                
-                loss_det = l_det(
-                    cls_outs, reg_outs, anchors, targets
-                    )
+                )
 
-                if global_it % 1000 == 0:
-                    writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
-                    writer.add_scalar("Norm Loss/train", loss_norm.item(), global_it)
-                    writer.add_scalar("Det Loss/train", loss_det["total_loss"].item(), global_it)
+                loss_det = l_det(cls_outs, reg_outs, anchors, targets, device=device)
 
-                # sum the losses 
-                loss_overall = loss_det["total_loss"] + alpha*loss_norm + beta*loss_amm
+                # if global_it % 1000 == 0:
+                #     writer.add_scalar("AMM Loss/train", loss_amm.item(), global_it)
+                #     writer.add_scalar("Norm Loss/train", loss_norm.item(), global_it)
+                #     writer.add_scalar(
+                #         "Det Loss/train", loss_det["total_loss"].item(), global_it
+                # )
+
+                # sum the losses
+                loss_overall = (
+                    loss_det["total_loss"] + alpha * loss_norm + beta * loss_amm
+                )
 
             scaler.scale(loss_overall).backward()
-    
+
             scaler.step(optimizer)
 
             scaler.update()
@@ -156,10 +173,10 @@ if __name__ == "__main__":
             del loss_amm, loss_norm, loss_det, loss_overall, outputs
 
             torch.cuda.empty_cache()
-        
+
         if (epoch + 1) % 2 == 0:
-            torch.save(model.state_dict(),f'{root_dir}/uavdt-epoch-{epoch}.pth')
+            torch.save(model.state_dict(), f"{root_dir}/uavdt-epoch-{epoch}.pth")
 
         scheduler.step()
 
-    writer.close()
+    # writer.close()

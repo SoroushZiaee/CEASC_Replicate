@@ -93,6 +93,7 @@ if __name__ == "__main__":
             )  # implement linear warmup up to and including epoch 11
         if it == 11 or it == 14:
             return 0.1  # decrease the lr by a factor of 10 at epochs 12 and 15
+        return 1
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
