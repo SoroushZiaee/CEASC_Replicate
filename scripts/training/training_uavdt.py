@@ -106,7 +106,6 @@ if __name__ == "__main__":
         progress_bar = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}")
 
         for i, batch in enumerate(progress_bar):
-            print(i)
             if i in []:
                 continue
             images = batch["image"].to(device)

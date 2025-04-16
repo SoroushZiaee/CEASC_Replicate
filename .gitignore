@@ -189,6 +189,8 @@ cython_debug/
 
 # ignore tensorboard logs 
 notebooks/runs/
+runs/
 
 # pickle files 
 *.pickle
+
