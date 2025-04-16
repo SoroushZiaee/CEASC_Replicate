@@ -323,6 +323,7 @@ class LDet(nn.Module):
         self.giou_weight = giou_weight
 
     def forward(self, cls_outs, reg_outs, anchors, targets):
+        feature_shapes = [feat.shape[-2:] for feat in cls_outs]
         device = cls_outs[0].device
         batch_size = len(targets["boxes"])
 
@@ -334,7 +335,13 @@ class LDet(nn.Module):
         matched_idxs, max_ious = [], []
         for b in range(batch_size):
             boxes = targets["boxes"][b].to(device)
-            m_idx, iou = self.matcher(anchors, boxes, device=device)
+            m_idx, iou = self.matcher(
+                anchors_per_level=anchors,
+                gt_boxes=targets["boxes"][b].to(device),
+                image_size=targets["orig_size"][b].to(device),
+                feature_shapes=feature_shapes,
+                device=device,
+            )
             matched_idxs.append(m_idx)
             max_ious.append(iou)
         matched_idxs = torch.stack(matched_idxs)
